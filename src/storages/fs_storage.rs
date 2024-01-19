@@ -83,12 +83,13 @@ impl FSStorageEngine {
                 }
                 Ok::<(), Error>(())
             }
-            .instrument(info_span!("fs_sync", table_id = ?iroh_doc.id().to_string()))
+            .instrument(info_span!("fs_sync", table_id = iroh_doc.id().to_string()))
         });
         for (_, fs_shard) in &fs_storage.fs_shards {
             tokio::spawn({
                 let fs_storage = fs_storage.clone();
                 let base_path = fs_shard.path().to_path_buf();
+                info!("started");
                 async move {
                     let mut read_dir_stream = tokio::fs::read_dir(&base_path)
                         .await
@@ -106,13 +107,15 @@ impl FSStorageEngine {
                             .map_err(Error::doc)?
                             .is_some();
                         if !exists_in_iroh {
-                            info!(name: "event", "restore event: {:?}", entry.path());
+                            info!("importing: {:?}", entry.path());
                             let import_progress = fs_storage
                                 .iroh_doc()
                                 .import_file(fs_storage.author_id, key, &entry.path(), true)
                                 .await
                                 .map_err(Error::doc)?;
                             import_progress.finish().await.map_err(Error::hash)?;
+                        } else {
+                            info!("skipping: {:?}", entry.path());
                         }
                     }
                     Ok::<(), Error>(())

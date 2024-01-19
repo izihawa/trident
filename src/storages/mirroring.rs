@@ -22,6 +22,7 @@ impl Mirroring {
         sync_client: IrohClient,
         delete_after_mirroring: bool,
     ) -> Self {
+        let table_id = iroh_doc.id().to_string();
         let thread = tokio::spawn(
             async move {
                 let mut stream = iroh_doc.subscribe().await.unwrap();
@@ -93,7 +94,7 @@ impl Mirroring {
                 warn!("stopped_mirroring");
                 Ok(())
             }
-            .instrument(info_span!("mirroring", table_id = ?iroh_doc.id().to_string())),
+            .instrument(info_span!("mirroring", table_id = table_id)),
         );
         Self {
             thread: Arc::new(thread),
