@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use tokio::io::AsyncRead;
-use tracing::{info, info_span};
+use tracing::{info, info_span, Instrument};
 
 #[derive(Clone)]
 pub struct FSStorageEngine {
@@ -44,8 +44,6 @@ impl FSStorageEngine {
         tokio::spawn({
             let fs_storage = fs_storage.clone();
             async move {
-                let span = info_span!("fs_sync", table_id = ?iroh_doc.id());
-                let _guard = span.enter();
                 let mut stream = fs_storage.iroh_doc().subscribe().await.unwrap();
                 let mut wait_list = HashMap::new();
                 info!("started");
@@ -85,6 +83,7 @@ impl FSStorageEngine {
                 }
                 Ok::<(), Error>(())
             }
+            .instrument(info_span!("fs_sync", table_id = ?iroh_doc.id().to_string()))
         });
         for (_, fs_shard) in &fs_storage.fs_shards {
             tokio::spawn({
@@ -118,6 +117,7 @@ impl FSStorageEngine {
                     }
                     Ok::<(), Error>(())
                 }
+                .instrument(info_span!("restore"))
             });
         }
         Ok(fs_storage)

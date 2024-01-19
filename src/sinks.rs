@@ -21,16 +21,26 @@ pub struct S3Sink {
 
 impl S3Sink {
     pub async fn new(name: &str, config: &S3Config) -> Self {
-        let credentials = Credentials::from_keys(
-            &config.aws_access_key_id,
-            &config.aws_secret_access_key,
-            None,
-        );
-        let sdk_config = aws_config::defaults(BehaviorVersion::latest())
-            .credentials_provider(credentials)
-            .region(Region::new(config.region_name.clone()))
-            .load()
-            .await;
+        let sdk_config = match &config.credentials {
+            Some(credentials) => {
+                let credentials = Credentials::from_keys(
+                    &credentials.aws_access_key_id,
+                    &credentials.aws_secret_access_key,
+                    None,
+                );
+                aws_config::defaults(BehaviorVersion::latest())
+                    .credentials_provider(credentials)
+                    .region(Region::new(config.region_name.clone()))
+                    .load()
+                    .await
+            }
+            None => {
+                aws_config::defaults(BehaviorVersion::latest())
+                    .region(Region::new(config.region_name.clone()))
+                    .load()
+                    .await
+            }
+        };
         let client = aws_sdk_s3::Client::new(&sdk_config);
         S3Sink {
             name: name.to_string(),

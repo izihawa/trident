@@ -300,13 +300,7 @@ async fn table_get(
     State(state): State<AppState>,
     Path((table, key)): Path<(String, String)>,
 ) -> Response {
-    match state
-        .iroh_node
-        .read()
-        .await
-        .table_get(&table, &key)
-        .await
-    {
+    match state.iroh_node.read().await.table_get(&table, &key).await {
         Ok(reader) => Response::builder()
             .body(Body::from_stream(ReaderStream::new(reader)))
             .unwrap(),

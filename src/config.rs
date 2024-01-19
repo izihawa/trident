@@ -26,10 +26,14 @@ pub struct FSShardConfig {
     pub weight: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct S3Config {
+pub struct S3ConfigCredentials {
     pub aws_access_key_id: String,
     pub aws_secret_access_key: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct S3Config {
+    pub credentials: Option<S3ConfigCredentials>,
     pub bucket_name: String,
     pub prefix: String,
     pub region_name: String,
