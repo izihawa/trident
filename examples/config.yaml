@@ -1,0 +1,20 @@
+http:
+  endpoint: 0.0.0.0:80
+iroh:
+  tables: {}
+  path: /trident/iroh
+  bind_port: 11204
+  rpc_port: 4919
+  max_rpc_connections: 16
+  max_rpc_streams: 1024
+  sinks: {}
+  fs_storages:
+    default:
+      replicas: 1
+      fs_shards:
+        - name: shard1
+          path: /trident/data/shard1
+          weight: 20
+        - name: shard2
+          path: /trident/data/shard2
+          weight: 20
