@@ -9,11 +9,16 @@ use iroh::bytes::Hash;
 use iroh::client::{Entry, LiveEvent};
 use iroh::sync::store::Query;
 use iroh::sync::{AuthorId, ContentStatus};
-use std::collections::HashMap;
+use lru::LruCache;
+use std::collections::{HashMap, HashSet};
 use std::io;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::io::AsyncRead;
-use tracing::{info, info_span, Instrument};
+use tokio_task_pool::Pool;
+use tokio_util::bytes;
+use tracing::{info, info_span, warn, Instrument};
 
 #[derive(Clone)]
 pub struct FSStorageEngine {
@@ -41,11 +46,11 @@ impl FSStorageEngine {
             fs_shards,
             replicas: fs_storage_config.replicas,
         };
+        let fs_storage_clone = fs_storage.clone();
         tokio::spawn({
-            let fs_storage = fs_storage.clone();
             async move {
-                let mut stream = fs_storage.iroh_doc().subscribe().await.unwrap();
-                let mut wait_list = HashMap::new();
+                let mut stream = fs_storage_clone.iroh_doc().subscribe().await.unwrap();
+                let mut wait_list = LruCache::new(NonZeroUsize::new(1024).expect("not possible"));
                 info!("started");
                 while let Some(event) = stream.next().await {
                     let event = event.unwrap();
@@ -58,39 +63,58 @@ impl FSStorageEngine {
                             info!(event = ?event);
                             match content_status {
                                 ContentStatus::Complete => {
-                                    fs_storage.process_remote_entry(entry).await?;
+                                    fs_storage_clone.process_remote_entry(entry).await?;
                                 }
                                 ContentStatus::Missing => {
                                     if entry.content_len() > 0 {
-                                        wait_list.insert(entry.content_hash(), entry.clone());
+                                        wait_list.put(entry.content_hash(), entry.clone());
                                     } else {
-                                        fs_storage.process_remote_entry(entry).await?;
+                                        fs_storage_clone.process_remote_entry(entry).await?;
                                     }
                                 }
                                 ContentStatus::Incomplete => {
-                                    wait_list.insert(entry.content_hash(), entry.clone());
+                                    wait_list.put(entry.content_hash(), entry.clone());
                                 }
                             };
                         }
                         LiveEvent::ContentReady { hash } => {
                             info!(event = ?event);
-                            fs_storage
-                                .process_remote_entry(&wait_list.remove(hash).unwrap())
-                                .await?;
+                            let Some(hash) = &wait_list.pop(hash) else {
+                                warn!(action = "skipped_absent_hash", hash = ?hash);
+                                continue;
+                            };
+                            fs_storage_clone.process_remote_entry(hash).await?;
                         }
                         _ => {}
                     };
                 }
                 Ok::<(), Error>(())
             }
-            .instrument(info_span!("fs_sync", table_id = iroh_doc.id().to_string()))
+            .instrument(info_span!(parent: None, "fs_sync", table_id = iroh_doc.id().to_string()))
         });
-        for (_, fs_shard) in &fs_storage.fs_shards {
-            tokio::spawn({
-                let fs_storage = fs_storage.clone();
-                let base_path = fs_shard.path().to_path_buf();
-                info!("started");
-                async move {
+
+        let fs_storage_clone = fs_storage.clone();
+
+        tokio::spawn(async move {
+            let all_keys: Arc<HashSet<_>> = Arc::new(
+                fs_storage_clone
+                    .iroh_doc()
+                    .get_many(Query::all())
+                    .await
+                    .map_err(Error::doc)?
+                    .map(|x| bytes::Bytes::copy_from_slice(x.unwrap().key()))
+                    .collect()
+                    .await,
+            );
+            let pool = Arc::new(Pool::bounded(16));
+
+            for fs_shard in &fs_storage_clone.fs_shards.values() {
+                let fs_storage_clone = fs_storage_clone.clone();
+                let fs_shard = fs_shard.clone();
+                let all_keys = all_keys.clone();
+                let pool = pool.clone();
+                tokio::spawn(async move {
+                    let base_path = fs_shard.path().to_path_buf();
                     let mut read_dir_stream = tokio::fs::read_dir(&base_path)
                         .await
                         .map_err(Error::io_error)?;
@@ -100,42 +124,37 @@ impl FSStorageEngine {
                         .map_err(Error::io_error)?
                     {
                         let key = key_to_bytes(&entry.file_name().to_string_lossy());
-                        let exists_in_iroh = fs_storage
-                            .iroh_doc()
-                            .get_one(Query::key_exact(&key))
-                            .await
-                            .map_err(Error::doc)?
-                            .is_some();
-                        if !exists_in_iroh {
-                            info!("importing: {:?}", entry.path());
-                            let import_progress = fs_storage
-                                .iroh_doc()
-                                .import_file(fs_storage.author_id, key, &entry.path(), true)
-                                .await
-                                .map_err(Error::doc)?;
-                            import_progress.finish().await.map_err(Error::hash)?;
-                        } else {
-                            info!("skipping: {:?}", entry.path());
+                        if all_keys.contains(&key) || key.starts_with(&[b'~']) {
+                            info!(action = "skipped", key = ?entry.file_name());
+                            continue;
                         }
+                        pool.spawn({
+                            let iroh_doc = fs_storage_clone.iroh_doc().clone();
+                            async move {
+                                let import_progress = iroh_doc
+                                    .import_file(
+                                        fs_storage_clone.author_id,
+                                        key,
+                                        &entry.path(),
+                                        true,
+                                    )
+                                    .await
+                                    .map_err(Error::doc)
+                                    .unwrap();
+                                import_progress.finish().await.map_err(Error::hash).unwrap();
+                                info!(action = "imported", key = ?entry.file_name())
+                            }
+                            .instrument(info_span!(parent: None, "restore"))
+                        })
+                        .await
+                        .unwrap();
                     }
                     Ok::<(), Error>(())
-                }
-                .instrument(info_span!("restore"))
-            });
-        }
+                });
+            }
+            Ok::<(), Error>(())
+        });
         Ok(fs_storage)
-    }
-
-    pub async fn get(&self, key: &str) -> Result<impl AsyncRead + Unpin> {
-        if let Some(file_shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
-            let file_shard = &self.fs_shards[&file_shard_config.name];
-            return file_shard
-                .open_store(key)
-                .await
-                .map_err(Error::io_error)?
-                .ok_or_else(|| Error::missing_key(key));
-        }
-        Err(Error::storage("missing file shards"))
     }
 
     fn get_path(&self, key: &str) -> Result<PathBuf> {
@@ -182,7 +201,6 @@ impl FSStorageEngine {
             .del(self.author_id, key_to_bytes(key))
             .await
             .map_err(Error::missing_key)?;
-        self.delete_from_fs(key).await?;
         Ok(removed_items)
     }
 

@@ -36,10 +36,16 @@ impl Storage {
     }
 
     pub async fn get(&self, key: &str) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
-        match &self.engine {
-            StorageEngine::FS(storage) => Ok(Box::new(storage.get(key).await?)),
-            StorageEngine::Iroh(storage) => Ok(Box::new(storage.get(key).await?)),
-        }
+        Ok(Box::new(
+            self.iroh_doc()
+                .get_one(Query::key_exact(key_to_bytes(key)))
+                .await
+                .map_err(Error::doc)?
+                .ok_or_else(|| Error::missing_key(key))?
+                .content_reader(self.iroh_doc())
+                .await
+                .map_err(Error::doc)?,
+        ))
     }
 
     pub async fn insert<S: AsyncRead + Send + Unpin>(&self, key: &str, value: S) -> Result<Hash> {

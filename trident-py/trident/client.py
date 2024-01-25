@@ -85,9 +85,8 @@ class TridentClient(BaseClient):
 
     async def table_ls(self, table) -> typing.AsyncGenerator[str, None]:
         response = await self.get(f"/tables/{table}/")
-        async for data, _ in response.content.iter_chunks():
-            for line in data.split('\n'):
-                yield line
+        async for line in response.content:
+            yield line.decode()[:-1]
 
     async def table_exists(self, table: str, key: str) -> bool:
         url = f"/tables/{table}/{key}/exists/"

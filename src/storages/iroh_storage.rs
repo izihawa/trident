@@ -20,19 +20,6 @@ impl IrohStorageEngine {
         }
     }
 
-    pub async fn get(&self, key: &str) -> Result<impl AsyncRead + Unpin> {
-        Ok(Box::new(
-            self.iroh_doc
-                .get_one(Query::key_exact(key_to_bytes(key)))
-                .await
-                .map_err(Error::doc)?
-                .ok_or_else(|| Error::missing_key(key))?
-                .content_reader(&self.iroh_doc)
-                .await
-                .map_err(Error::doc)?,
-        ))
-    }
-
     pub async fn delete(&self, key: &str) -> Result<usize> {
         self.iroh_doc
             .del(self.author_id, key_to_bytes(key))

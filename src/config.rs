@@ -81,6 +81,7 @@ pub struct IrohConfig {
     pub sinks: HashMap<String, SinkConfig>,
     #[serde(default = "HashMap::new")]
     pub fs_storages: HashMap<String, FSStorageEngineConfig>,
+    pub gc_interval_secs: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

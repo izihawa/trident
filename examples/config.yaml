@@ -5,7 +5,7 @@ iroh:
   path: /trident/iroh
   bind_port: 11204
   rpc_port: 4919
-  max_rpc_connections: 16
+  max_rpc_connections: 32
   max_rpc_streams: 1024
   sinks: {}
   fs_storages:
@@ -14,7 +14,8 @@ iroh:
       fs_shards:
         - name: shard1
           path: /trident/data/shard1
-          weight: 20
+          weight: 1
         - name: shard2
-          path: /trident/data/shard2
-          weight: 20
+          path: /trident/data/shard1
+          weight: 1
+  gc_interval_secs: 86400

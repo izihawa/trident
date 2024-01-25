@@ -10,10 +10,11 @@ use crate::storages::{Storage, StorageEngine};
 use crate::utils::bytes_to_key;
 use crate::IrohClient;
 use async_stream::stream;
+use futures::StreamExt;
 use iroh::bytes::Hash;
 use iroh::client::quic::RPC_ALPN;
 use iroh::net::derp::DerpMode;
-use iroh::node::Node;
+use iroh::node::{GcPolicy, Node};
 use iroh::rpc_protocol::{ProviderRequest, ProviderResponse, ShareMode};
 use iroh::sync::{AuthorId, NamespaceId};
 use iroh::ticket::DocTicket;
@@ -24,9 +25,11 @@ use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::AsyncRead;
 use tokio::sync::RwLock;
 use tokio_stream::Stream;
+use tracing::info;
 
 pub struct IrohNode {
     sync_client: IrohClient,
@@ -81,17 +84,31 @@ impl IrohNode {
             QuinnServerEndpoint::<ProviderRequest, ProviderResponse>::new(rpc_quinn_endpoint)
                 .map_err(Error::node_create)?;
 
-        let node = Node::builder(db, docs)
+        let mut node_builder = Node::builder(db, docs)
             .secret_key(secret_key)
             .peers_data_path(peer_data_path)
             .derp_mode(DerpMode::Default)
             .bind_port(config_lock.iroh.bind_port)
-            .rpc_endpoint(rpc_endpoint)
-            .spawn()
-            .await
-            .map_err(Error::node_create)?;
+            .rpc_endpoint(rpc_endpoint);
 
+        if let Some(gc_interval_secs) = config_lock.iroh.gc_interval_secs {
+            node_builder =
+                node_builder.gc_policy(GcPolicy::Interval(Duration::from_secs(gc_interval_secs)))
+        }
+        let node = node_builder.spawn().await.map_err(Error::node_create)?;
         let sync_client = node.client();
+
+        for doc in sync_client
+            .docs
+            .list()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap().0)
+            .collect::<Vec<_>>()
+            .await
+        {
+            info!(action = "all_docs", "{}", doc);
+        }
 
         let author_id = match &config_lock.iroh.author {
             Some(author) => AuthorId::from_str(author).unwrap(),
@@ -135,19 +152,23 @@ impl IrohNode {
                     .await?,
                 ),
             };
-            let mirroring = table_config.mirroring.clone().map(|mirroring_config| {
-                Mirroring::new(
-                    iroh_doc.clone(),
-                    mirroring_config
-                        .sinks
-                        .clone()
-                        .into_iter()
-                        .map(|sink_name| sinks[&sink_name].clone())
-                        .collect(),
-                    sync_client.clone(),
-                    mirroring_config.delete_after_mirroring,
-                )
-            });
+            let mirroring = match &table_config.mirroring {
+                Some(mirroring_config) => Some(
+                    Mirroring::new(
+                        iroh_doc.clone(),
+                        mirroring_config
+                            .sinks
+                            .clone()
+                            .into_iter()
+                            .map(|sink_name| sinks[&sink_name].clone())
+                            .collect(),
+                        sync_client.clone(),
+                        mirroring_config.delete_after_mirroring,
+                    )
+                    .await?,
+                ),
+                None => None,
+            };
             let storage = Storage::new(storage_engine, mirroring);
             table_storages.insert(table_name.clone(), storage);
         }
@@ -222,19 +243,23 @@ impl IrohNode {
                         StorageEngineConfig::FS(storage_name.to_string()),
                     ),
                 };
-                let mirroring = mirroring_config.clone().map(|mirroring_config| {
-                    Mirroring::new(
-                        iroh_doc.clone(),
-                        mirroring_config
-                            .sinks
-                            .clone()
-                            .into_iter()
-                            .map(|sink_name| self.sinks[&sink_name].clone())
-                            .collect(),
-                        self.sync_client.clone(),
-                        mirroring_config.delete_after_mirroring,
-                    )
-                });
+                let mirroring = match &mirroring_config {
+                    Some(mirroring_config) => Some(
+                        Mirroring::new(
+                            iroh_doc.clone(),
+                            mirroring_config
+                                .sinks
+                                .clone()
+                                .into_iter()
+                                .map(|sink_name| self.sinks[&sink_name].clone())
+                                .collect(),
+                            self.sync_client.clone(),
+                            mirroring_config.delete_after_mirroring,
+                        )
+                        .await?,
+                    ),
+                    None => None,
+                };
                 let storage = Storage::new(storage_engine, mirroring);
                 entry.insert(storage);
                 self.config.write().await.iroh.tables.insert(
@@ -287,20 +312,23 @@ impl IrohNode {
                         StorageEngineConfig::FS(storage_name.to_string()),
                     ),
                 };
-
-                let mirroring = mirroring_config.clone().map(|mirroring_config| {
-                    Mirroring::new(
-                        iroh_doc.clone(),
-                        mirroring_config
-                            .sinks
-                            .clone()
-                            .into_iter()
-                            .map(|sink_name| self.sinks[&sink_name].clone())
-                            .collect(),
-                        self.sync_client.clone(),
-                        mirroring_config.delete_after_mirroring,
-                    )
-                });
+                let mirroring = match &mirroring_config {
+                    Some(mirroring_config) => Some(
+                        Mirroring::new(
+                            iroh_doc.clone(),
+                            mirroring_config
+                                .sinks
+                                .clone()
+                                .into_iter()
+                                .map(|sink_name| self.sinks[&sink_name].clone())
+                                .collect(),
+                            self.sync_client.clone(),
+                            mirroring_config.delete_after_mirroring,
+                        )
+                        .await?,
+                    ),
+                    None => None,
+                };
                 let storage = Storage::new(storage_engine, mirroring);
 
                 entry.insert(storage);
@@ -321,14 +349,21 @@ impl IrohNode {
     pub async fn tables_drop(&mut self, table_name: &str) -> Result<()> {
         match self.table_storages.remove(table_name) {
             None => Err(Error::missing_table(table_name)),
-            Some(_) => Ok(self
-                .config
-                .write()
-                .await
-                .iroh
-                .tables
-                .remove(table_name)
-                .unwrap()),
+            Some(table_storage) => {
+                self.sync_client
+                    .docs
+                    .drop_doc(table_storage.iroh_doc().id())
+                    .await
+                    .map_err(Error::doc)?;
+                Ok(self
+                    .config
+                    .write()
+                    .await
+                    .iroh
+                    .tables
+                    .remove(table_name)
+                    .unwrap())
+            }
         }?;
         Ok(())
     }
@@ -361,9 +396,7 @@ impl IrohNode {
         let Some((from_hash, from_size)) = from_table.get_hash(from_key).await? else {
             return Err(Error::missing_key(from_key));
         };
-        to_table
-            .insert_hash(to_key, from_hash.clone(), from_size)
-            .await?;
+        to_table.insert_hash(to_key, from_hash, from_size).await?;
         Ok(from_hash)
     }
 

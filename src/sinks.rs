@@ -6,11 +6,12 @@ use aws_sdk_s3::config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 use percent_encoding::utf8_percent_encode;
+use tokio_util::bytes;
 
 #[async_trait]
 pub trait Sink: Send + Sync {
     fn name(&self) -> &str;
-    async fn send(&self, key: &[u8], value: Vec<u8>) -> Result<(), Error>;
+    async fn send(&self, key: &[u8], value: bytes::Bytes) -> Result<(), Error>;
 }
 
 pub struct S3Sink {
@@ -56,12 +57,13 @@ impl Sink for S3Sink {
         &self.name
     }
 
-    async fn send(&self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
+    async fn send(&self, key: &[u8], value: bytes::Bytes) -> Result<(), Error> {
         // ToDo: Remove allocating and return stream
         // https://github.com/awslabs/aws-sdk-rust/discussions/361
-        let encoded_key = utf8_percent_encode(std::str::from_utf8(bytes_to_key(key)).unwrap(), FRAGMENT)
-            .collect::<String>()
-            .to_lowercase();
+        let encoded_key =
+            utf8_percent_encode(std::str::from_utf8(bytes_to_key(key)).unwrap(), FRAGMENT)
+                .collect::<String>()
+                .to_lowercase();
 
         self.client
             .put_object()

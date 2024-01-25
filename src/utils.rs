@@ -9,12 +9,12 @@ pub const FRAGMENT: &AsciiSet = &CONTROLS
     .add(b'`')
     .add(b'/');
 
+#[inline]
 pub fn key_to_bytes(key: &str) -> bytes::Bytes {
-    let mut v = Vec::from(key.as_bytes());
-    v.push(b'\0');
-    bytes::Bytes::from(v)
+    bytes::Bytes::copy_from_slice(key.as_bytes())
 }
 
+#[inline]
 pub fn bytes_to_key(b: &[u8]) -> &[u8] {
-    b.strip_suffix(b"\0").unwrap_or(b)
+    b
 }
