@@ -15,17 +15,22 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Builder;
+use tokio::signal;
 use tokio::sync::RwLock;
 use tokio_util::io::{ReaderStream, StreamReader};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tower_http::trace::{self, TraceLayer};
-use tracing::Level;
+use tracing::{info, Level};
 use tracing_subscriber::EnvFilter;
-use trident_storage::config::{
-    load_config, save_config, Config, MirroringConfig, SinkConfig, TableConfig,
-};
+use trident_storage::config::{load_config, save_config, Config, SinkConfig, TableConfig};
 use trident_storage::error::Error;
 
 use trident_storage::iroh_node::IrohNode;
+
+fn return_true() -> bool {
+    true
+}
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -38,16 +43,22 @@ struct Args {
 
 #[derive(Deserialize)]
 struct TablesCreateRequest {
-    storage: Option<String>,
-    mirroring: Option<MirroringConfig>,
+    storage: String,
+    #[serde(default)]
+    sinks: Vec<String>,
+    #[serde(default = "return_true")]
+    keep_blob: bool,
 }
 
 #[derive(Deserialize)]
 struct TablesImportRequest {
     ticket: String,
     download_policy: DownloadPolicy,
-    storage: Option<String>,
-    mirroring: Option<MirroringConfig>,
+    storage: String,
+    #[serde(default)]
+    sinks: Vec<String>,
+    #[serde(default = "return_true")]
+    keep_blob: bool,
 }
 
 #[derive(Deserialize)]
@@ -83,10 +94,16 @@ struct TablesLsResponse {
     pub tables: HashMap<String, TableConfig>,
 }
 
-async fn create_app(args: Args) -> Result<AppState, Error> {
+async fn create_app(
+    args: Args,
+    cancellation_token: CancellationToken,
+    task_tracker: TaskTracker,
+) -> Result<AppState, Error> {
     let config = Arc::new(RwLock::new(load_config(&args.config).await?));
     let state = AppState {
-        iroh_node: Arc::new(RwLock::new(IrohNode::new(config.clone()).await?)),
+        iroh_node: Arc::new(RwLock::new(
+            IrohNode::new(config.clone(), cancellation_token, task_tracker).await?,
+        )),
         config: config.clone(),
         config_path: args.config.clone(),
     };
@@ -96,8 +113,10 @@ async fn create_app(args: Args) -> Result<AppState, Error> {
 
 async fn app() -> Result<(), Error> {
     let args = Args::parse();
+    let cancellation_token = CancellationToken::new();
+    let task_tracker = TaskTracker::new();
 
-    let state = create_app(args).await?;
+    let state = create_app(args, cancellation_token.clone(), task_tracker.clone()).await?;
     let config = state.config.clone();
 
     // build our application with a route
@@ -127,8 +146,39 @@ async fn app() -> Result<(), Error> {
         .await
         .unwrap();
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(cancellation_token, task_tracker))
+        .await
+        .unwrap();
     Ok(())
+}
+
+async fn shutdown_signal(cancelation_token: CancellationToken, task_tracker: TaskTracker) {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    info!("received_signal");
+    cancelation_token.cancel();
+    task_tracker.wait().await;
+    info!("stopped_tasks");
 }
 
 fn main() -> Result<(), Error> {
@@ -187,8 +237,9 @@ async fn tables_create(
         .await
         .tables_create(
             &table,
-            tables_create_request.storage.as_deref(),
-            tables_create_request.mirroring,
+            &tables_create_request.storage,
+            tables_create_request.sinks,
+            tables_create_request.keep_blob,
         )
         .await
     {
@@ -217,8 +268,9 @@ async fn tables_import(
             &table,
             &tables_import_request.ticket,
             tables_import_request.download_policy,
-            tables_import_request.storage.as_deref(),
-            tables_import_request.mirroring,
+            &tables_import_request.storage,
+            tables_import_request.sinks,
+            tables_import_request.keep_blob,
         )
         .await
     {
@@ -313,8 +365,12 @@ async fn table_get(
     Path((table, key)): Path<(String, String)>,
 ) -> Response {
     match state.iroh_node.read().await.table_get(&table, &key).await {
-        Ok(reader) => Response::builder()
+        Ok(Some(reader)) => Response::builder()
             .body(Body::from_stream(ReaderStream::new(reader)))
+            .unwrap(),
+        Ok(None) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::default())
             .unwrap(),
         Err(e) => e.into_response(),
     }

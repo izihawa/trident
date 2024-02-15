@@ -1,12 +1,7 @@
-use crate::config::{
-    Config, FSStorageEngineConfig, MirroringConfig, SinkConfig, StorageEngineConfig, TableConfig,
-};
+use crate::config::{Config, SinkConfig, StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
-use crate::sinks::{S3Sink, Sink};
-use crate::storages::fs_storage::FSStorageEngine;
-use crate::storages::iroh_storage::IrohStorageEngine;
-use crate::storages::mirroring::Mirroring;
-use crate::storages::{Storage, StorageEngine};
+use crate::sinks::{IpfsSink, S3Sink, Sink};
+use crate::storage::Storage;
 use crate::utils::bytes_to_key;
 use crate::IrohClient;
 use async_stream::stream;
@@ -29,6 +24,8 @@ use std::time::Duration;
 use tokio::io::AsyncRead;
 use tokio::sync::RwLock;
 use tokio_stream::Stream;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::info;
 
 pub struct IrohNode {
@@ -36,12 +33,18 @@ pub struct IrohNode {
     table_storages: HashMap<String, Storage>,
     author_id: AuthorId,
     config: Arc<RwLock<Config>>,
-    fs_storage_configs: HashMap<String, FSStorageEngineConfig>,
+    fs_storage_configs: HashMap<String, StorageEngineConfig>,
     sinks: HashMap<String, Arc<dyn Sink>>,
+    cancellation_token: CancellationToken,
+    task_tracker: TaskTracker,
 }
 
 impl IrohNode {
-    pub async fn new(config: Arc<RwLock<Config>>) -> Result<Self> {
+    pub async fn new(
+        config: Arc<RwLock<Config>>,
+        cancellation_token: CancellationToken,
+        task_tracker: TaskTracker,
+    ) -> Result<Self> {
         let mut config_lock = config.write().await;
         tokio::fs::create_dir_all(&config_lock.iroh.path)
             .await
@@ -125,11 +128,15 @@ impl IrohNode {
                     let sink = S3Sink::new(&name, &s3_config).await;
                     sinks.insert(name, Arc::new(sink) as Arc<dyn Sink>)
                 }
+                SinkConfig::Ipfs(ipfs_config) => {
+                    let sink = IpfsSink::new(&name, &ipfs_config).await;
+                    sinks.insert(name, Arc::new(sink) as Arc<dyn Sink>)
+                }
             };
         }
 
         let mut table_storages = HashMap::new();
-        let fs_storage_configs = config_lock.iroh.fs_storages.clone();
+        let storage_configs = config_lock.iroh.fs_storages.clone();
         for (table_name, table_config) in &mut config_lock.iroh.tables {
             let iroh_doc = sync_client
                 .docs
@@ -142,38 +149,24 @@ impl IrohNode {
                 .await
                 .map_err(Error::doc)?;
             iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
-            let storage_engine = match &table_config.storage_engine {
-                StorageEngineConfig::Iroh => {
-                    StorageEngine::Iroh(IrohStorageEngine::new(author_id, iroh_doc.clone()))
-                }
-                StorageEngineConfig::FS(storage_name) => StorageEngine::FS(
-                    FSStorageEngine::new(
-                        author_id,
-                        iroh_doc.clone(),
-                        fs_storage_configs[storage_name].clone(),
-                    )
-                    .await?,
-                ),
-            };
-            let mirroring = match &table_config.mirroring {
-                Some(mirroring_config) => Some(
-                    Mirroring::new(
-                        iroh_doc.clone(),
-                        mirroring_config
-                            .sinks
-                            .clone()
-                            .into_iter()
-                            .map(|sink_name| sinks[&sink_name].clone())
-                            .collect(),
-                        sync_client.clone(),
-                        mirroring_config.delete_after_mirroring,
-                    )
-                    .await?,
-                ),
-                None => None,
-            };
-            let storage = Storage::new(storage_engine, mirroring);
-            table_storages.insert(table_name.clone(), storage);
+            let materialised_sinks = table_config
+                .sinks
+                .iter()
+                .map(|sink_name| sinks[sink_name].clone())
+                .collect();
+            let storage_engine = Storage::new(
+                table_name,
+                author_id,
+                iroh_doc.clone(),
+                sync_client.clone(),
+                storage_configs[&table_config.storage_name].clone(),
+                materialised_sinks,
+                table_config.keep_blob,
+                cancellation_token.clone(),
+                task_tracker.clone(),
+            )
+            .await?;
+            table_storages.insert(table_name.clone(), storage_engine);
         }
 
         let fs_storage_configs = config_lock.iroh.fs_storages.clone();
@@ -187,6 +180,8 @@ impl IrohNode {
             config,
             fs_storage_configs,
             sinks,
+            cancellation_token: cancellation_token.clone(),
+            task_tracker: task_tracker.clone(),
         };
 
         Ok(iroh_node)
@@ -218,59 +213,39 @@ impl IrohNode {
     pub async fn tables_create(
         &mut self,
         table_name: &str,
-        storage_name: Option<&str>,
-        mirroring_config: Option<MirroringConfig>,
+        storage_name: &str,
+        sinks: Vec<String>,
+        keep_blob: bool,
     ) -> Result<NamespaceId> {
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
             Entry::Vacant(entry) => {
                 let iroh_doc = self.sync_client.docs.create().await.map_err(Error::table)?;
-                let (storage_engine, storage_engine_config) = match storage_name {
-                    None => (
-                        StorageEngine::Iroh(IrohStorageEngine::new(
-                            self.author_id,
-                            iroh_doc.clone(),
-                        )),
-                        StorageEngineConfig::Iroh,
-                    ),
-                    Some(storage_name) => (
-                        StorageEngine::FS(
-                            FSStorageEngine::new(
-                                self.author_id,
-                                iroh_doc.clone(),
-                                self.fs_storage_configs[storage_name].clone(),
-                            )
-                            .await?,
-                        ),
-                        StorageEngineConfig::FS(storage_name.to_string()),
-                    ),
-                };
-                let mirroring = match &mirroring_config {
-                    Some(mirroring_config) => Some(
-                        Mirroring::new(
-                            iroh_doc.clone(),
-                            mirroring_config
-                                .sinks
-                                .clone()
-                                .into_iter()
-                                .map(|sink_name| self.sinks[&sink_name].clone())
-                                .collect(),
-                            self.sync_client.clone(),
-                            mirroring_config.delete_after_mirroring,
-                        )
-                        .await?,
-                    ),
-                    None => None,
-                };
-                let storage = Storage::new(storage_engine, mirroring);
-                entry.insert(storage);
+                let materialised_sinks = sinks
+                    .iter()
+                    .map(|sink_name| self.sinks[sink_name].clone())
+                    .collect();
+                let storage_engine = Storage::new(
+                    table_name,
+                    self.author_id,
+                    iroh_doc.clone(),
+                    self.sync_client.clone(),
+                    self.fs_storage_configs[storage_name].clone(),
+                    materialised_sinks,
+                    keep_blob,
+                    self.cancellation_token.clone(),
+                    self.task_tracker.clone(),
+                )
+                .await?;
+                entry.insert(storage_engine);
                 self.config.write().await.iroh.tables.insert(
                     table_name.to_string(),
                     TableConfig {
                         id: iroh_doc.id().to_string(),
                         download_policy: DownloadPolicy::default(),
-                        mirroring: mirroring_config,
-                        storage_engine: storage_engine_config,
+                        sinks,
+                        storage_name: storage_name.to_string(),
+                        keep_blob,
                     },
                 );
 
@@ -284,8 +259,9 @@ impl IrohNode {
         table_name: &str,
         table_ticket: &str,
         download_policy: DownloadPolicy,
-        storage_name: Option<&str>,
-        mirroring_config: Option<MirroringConfig>,
+        storage_name: &str,
+        sinks: Vec<String>,
+        keep_blob: bool,
     ) -> Result<NamespaceId> {
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
@@ -300,53 +276,31 @@ impl IrohNode {
                     .set_download_policy(download_policy.clone())
                     .await
                     .map_err(Error::doc)?;
-                let (storage_engine, storage_engine_config) = match storage_name {
-                    None => (
-                        StorageEngine::Iroh(IrohStorageEngine::new(
-                            self.author_id,
-                            iroh_doc.clone(),
-                        )),
-                        StorageEngineConfig::Iroh,
-                    ),
-                    Some(storage_name) => (
-                        StorageEngine::FS(
-                            FSStorageEngine::new(
-                                self.author_id,
-                                iroh_doc.clone(),
-                                self.fs_storage_configs[storage_name].clone(),
-                            )
-                            .await?,
-                        ),
-                        StorageEngineConfig::FS(storage_name.to_string()),
-                    ),
-                };
-                let mirroring = match &mirroring_config {
-                    Some(mirroring_config) => Some(
-                        Mirroring::new(
-                            iroh_doc.clone(),
-                            mirroring_config
-                                .sinks
-                                .clone()
-                                .into_iter()
-                                .map(|sink_name| self.sinks[&sink_name].clone())
-                                .collect(),
-                            self.sync_client.clone(),
-                            mirroring_config.delete_after_mirroring,
-                        )
-                        .await?,
-                    ),
-                    None => None,
-                };
-                let storage = Storage::new(storage_engine, mirroring);
-
-                entry.insert(storage);
+                let materialised_sinks = sinks
+                    .iter()
+                    .map(|sink_name| self.sinks[sink_name].clone())
+                    .collect();
+                let storage_engine = Storage::new(
+                    table_name,
+                    self.author_id,
+                    iroh_doc.clone(),
+                    self.sync_client.clone(),
+                    self.fs_storage_configs[storage_name].clone(),
+                    materialised_sinks,
+                    keep_blob,
+                    self.cancellation_token.clone(),
+                    self.task_tracker.clone(),
+                )
+                .await?;
+                entry.insert(storage_engine);
                 self.config.write().await.iroh.tables.insert(
                     table_name.to_string(),
                     TableConfig {
                         id: iroh_doc.id().to_string(),
-                        download_policy: download_policy,
-                        mirroring: mirroring_config,
-                        storage_engine: storage_engine_config,
+                        download_policy,
+                        sinks,
+                        storage_name: storage_name.to_string(),
+                        keep_blob,
                     },
                 );
 
@@ -420,7 +374,7 @@ impl IrohNode {
         &self,
         table_name: &str,
         key: &str,
-    ) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
+    ) -> Result<Option<Box<dyn AsyncRead + Unpin + Send>>> {
         match self.table_storages.get(table_name) {
             Some(table_storage) => table_storage.get(key).await,
             None => Err(Error::missing_table(table_name)),
@@ -436,7 +390,7 @@ impl IrohNode {
 
     pub async fn table_exists(&self, table_name: &str, key: &str) -> Result<bool> {
         match self.table_storages.get(table_name) {
-            Some(table_storage) => table_storage.exists(key).await,
+            Some(table_storage) => Ok(table_storage.exists(key).await?.is_some()),
             None => Err(Error::missing_table(table_name)),
         }
     }

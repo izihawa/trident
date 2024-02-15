@@ -1,18 +1,13 @@
 use crate::config::S3Config;
 use crate::error::Error;
+use crate::sinks::Sink;
 use crate::utils::{bytes_to_key, FRAGMENT};
 use aws_credential_types::Credentials;
 use aws_sdk_s3::config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 use percent_encoding::utf8_percent_encode;
-use tokio_util::bytes;
-
-#[async_trait]
-pub trait Sink: Send + Sync {
-    fn name(&self) -> &str;
-    async fn send(&self, key: &[u8], value: bytes::Bytes) -> Result<(), Error>;
-}
+use std::path::Path;
 
 pub struct S3Sink {
     name: String,
@@ -57,19 +52,21 @@ impl Sink for S3Sink {
         &self.name
     }
 
-    async fn send(&self, key: &[u8], value: bytes::Bytes) -> Result<(), Error> {
+    async fn send(&self, key: &[u8], path: &Path) -> Result<(), Error> {
         // ToDo: Remove allocating and return stream
         // https://github.com/awslabs/aws-sdk-rust/discussions/361
         let encoded_key =
             utf8_percent_encode(std::str::from_utf8(bytes_to_key(key)).unwrap(), FRAGMENT)
                 .collect::<String>()
                 .to_lowercase();
-
+        let body = ByteStream::from_path(Path::new(path))
+            .await
+            .map_err(Error::sink)?;
         self.client
             .put_object()
             .bucket(&self.config.bucket_name)
             .key([self.config.prefix.as_str(), encoded_key.as_str()].join("/"))
-            .body(ByteStream::from(value))
+            .body(body)
             .send()
             .await
             .map_err(Error::sink)?;

@@ -24,7 +24,7 @@ pub mod file_shard;
 mod hash_ring;
 pub mod iroh_node;
 mod sinks;
-pub mod storages;
+mod storage;
 mod utils;
 
 pub type IrohDoc = iroh::client::Doc<FlumeConnection<ProviderResponse, ProviderRequest>>;

@@ -1,10 +1,10 @@
-use crate::config::FSShardConfig;
+use crate::config::ShardConfig;
 use bisection::bisect_right;
 use std::collections::HashMap;
 use std::collections::{BinaryHeap, HashSet};
 use std::hash::{Hash, Hasher};
 
-impl Hash for FSShardConfig {
+impl Hash for ShardConfig {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.path.hash(state)
     }
@@ -13,12 +13,12 @@ impl Hash for FSShardConfig {
 #[derive(Clone)]
 pub struct HashRing {
     v_nodes: usize,
-    ring: HashMap<u128, FSShardConfig>,
+    ring: HashMap<u128, ShardConfig>,
     sorted_keys: Vec<u128>,
 }
 
 impl HashRing {
-    pub fn with_hasher<'a>(nodes: impl Iterator<Item = &'a FSShardConfig>) -> HashRing {
+    pub fn with_hasher<'a>(nodes: impl Iterator<Item = &'a ShardConfig>) -> HashRing {
         let mut new_hash_ring = HashRing {
             v_nodes: 160,
             ring: HashMap::new(),
@@ -29,7 +29,7 @@ impl HashRing {
     }
 
     /// Adds a node to the hash ring
-    pub fn add_nodes<'a>(&mut self, nodes: impl Iterator<Item = &'a FSShardConfig>) {
+    pub fn add_nodes<'a>(&mut self, nodes: impl Iterator<Item = &'a ShardConfig>) {
         for node in nodes {
             for i in 0..self.v_nodes * node.weight {
                 let node_name = format!("{}-{}", &node.name, i);
@@ -41,7 +41,7 @@ impl HashRing {
         self.sorted_keys = BinaryHeap::from(self.sorted_keys.clone()).into_sorted_vec();
     }
 
-    pub fn range(&self, key: &str, size: usize) -> Vec<&FSShardConfig> {
+    pub fn range(&self, key: &str, size: usize) -> Vec<&ShardConfig> {
         let mut result = Vec::with_capacity(size);
         let mut visited = HashSet::new();
         let position = if let Some(position) = self.get_pos(key) {
