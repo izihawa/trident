@@ -1,4 +1,5 @@
 use crate::error::Error;
+use iroh::sync::store::DownloadPolicy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,6 +18,8 @@ pub enum StorageEngineConfig {
 pub struct FSStorageEngineConfig {
     pub replicas: u8,
     pub fs_shards: Vec<FSShardConfig>,
+    #[serde(default = "return_false")]
+    pub is_import_missing_enabled: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -57,6 +60,8 @@ pub struct MirroringConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TableConfig {
     pub id: String,
+    #[serde(default = "DownloadPolicy::default")]
+    pub download_policy: DownloadPolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mirroring: Option<MirroringConfig>,
     pub storage_engine: StorageEngineConfig,

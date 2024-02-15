@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use crate::utils::key_to_bytes;
 use crate::IrohDoc;
 use iroh::bytes::Hash;
-use iroh::sync::store::Query;
+use iroh::sync::store::{Query, SortBy, SortDirection};
 use iroh::sync::AuthorId;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -49,7 +49,9 @@ impl IrohStorageEngine {
     pub async fn exists(&self, key: &str) -> Result<bool> {
         Ok(self
             .iroh_doc
-            .get_one(Query::key_exact(key_to_bytes(key)))
+            .get_one(
+                Query::key_exact(key_to_bytes(key)).sort_by(SortBy::KeyAuthor, SortDirection::Asc),
+            )
             .await
             .map_err(Error::doc)?
             .is_some())
@@ -57,5 +59,21 @@ impl IrohStorageEngine {
 
     pub const fn iroh_doc(&self) -> &IrohDoc {
         &self.iroh_doc
+    }
+
+    pub async fn get(&self, key: &str) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
+        Ok(Box::new(
+            self.iroh_doc()
+                .get_one(
+                    Query::key_exact(key_to_bytes(key))
+                        .sort_by(SortBy::KeyAuthor, SortDirection::Asc),
+                )
+                .await
+                .map_err(Error::doc)?
+                .ok_or_else(|| Error::missing_key(key))?
+                .content_reader(self.iroh_doc())
+                .await
+                .map_err(Error::doc)?,
+        ))
     }
 }

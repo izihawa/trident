@@ -13,9 +13,9 @@ use async_stream::stream;
 use futures::StreamExt;
 use iroh::bytes::Hash;
 use iroh::client::quic::RPC_ALPN;
-use iroh::net::derp::DerpMode;
 use iroh::node::{GcPolicy, Node};
 use iroh::rpc_protocol::{ProviderRequest, ProviderResponse, ShareMode};
+use iroh::sync::store::DownloadPolicy;
 use iroh::sync::{AuthorId, NamespaceId};
 use iroh::ticket::DocTicket;
 use quic_rpc::transport::quinn::QuinnServerEndpoint;
@@ -87,7 +87,6 @@ impl IrohNode {
         let mut node_builder = Node::builder(db, docs)
             .secret_key(secret_key)
             .peers_data_path(peer_data_path)
-            .derp_mode(DerpMode::Default)
             .bind_port(config_lock.iroh.bind_port)
             .rpc_endpoint(rpc_endpoint);
 
@@ -138,7 +137,11 @@ impl IrohNode {
                 .await
                 .map_err(Error::table)?
                 .unwrap();
-            iroh_doc.start_sync(vec![]).await.unwrap();
+            iroh_doc
+                .set_download_policy(table_config.download_policy.clone())
+                .await
+                .map_err(Error::doc)?;
+            iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
             let storage_engine = match &table_config.storage_engine {
                 StorageEngineConfig::Iroh => {
                     StorageEngine::Iroh(IrohStorageEngine::new(author_id, iroh_doc.clone()))
@@ -222,7 +225,6 @@ impl IrohNode {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
             Entry::Vacant(entry) => {
                 let iroh_doc = self.sync_client.docs.create().await.map_err(Error::table)?;
-
                 let (storage_engine, storage_engine_config) = match storage_name {
                     None => (
                         StorageEngine::Iroh(IrohStorageEngine::new(
@@ -266,6 +268,7 @@ impl IrohNode {
                     table_name.to_string(),
                     TableConfig {
                         id: iroh_doc.id().to_string(),
+                        download_policy: DownloadPolicy::default(),
                         mirroring: mirroring_config,
                         storage_engine: storage_engine_config,
                     },
@@ -280,6 +283,7 @@ impl IrohNode {
         &mut self,
         table_name: &str,
         table_ticket: &str,
+        download_policy: DownloadPolicy,
         storage_name: Option<&str>,
         mirroring_config: Option<MirroringConfig>,
     ) -> Result<NamespaceId> {
@@ -289,9 +293,13 @@ impl IrohNode {
                 let iroh_doc = self
                     .sync_client
                     .docs
-                    .import(DocTicket::from_str(table_ticket).unwrap())
+                    .import(DocTicket::from_str(table_ticket).map_err(Error::doc)?)
                     .await
                     .map_err(Error::table)?;
+                iroh_doc
+                    .set_download_policy(download_policy.clone())
+                    .await
+                    .map_err(Error::doc)?;
                 let (storage_engine, storage_engine_config) = match storage_name {
                     None => (
                         StorageEngine::Iroh(IrohStorageEngine::new(
@@ -336,6 +344,7 @@ impl IrohNode {
                     table_name.to_string(),
                     TableConfig {
                         id: iroh_doc.id().to_string(),
+                        download_policy: download_policy,
                         mirroring: mirroring_config,
                         storage_engine: storage_engine_config,
                     },
@@ -427,7 +436,7 @@ impl IrohNode {
 
     pub async fn table_exists(&self, table_name: &str, key: &str) -> Result<bool> {
         match self.table_storages.get(table_name) {
-            Some(table_storage) => Ok(table_storage.get_hash(key).await?.is_some()),
+            Some(table_storage) => table_storage.exists(key).await,
             None => Err(Error::missing_table(table_name)),
         }
     }

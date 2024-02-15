@@ -4,7 +4,7 @@ use futures::Stream;
 use iroh::bytes::Hash;
 use iroh::client::Entry;
 use iroh::rpc_protocol::ShareMode;
-use iroh::sync::store::Query;
+use iroh::sync::store::{Query, SortBy, SortDirection};
 use iroh::ticket::DocTicket;
 use tokio::io::AsyncRead;
 
@@ -36,16 +36,10 @@ impl Storage {
     }
 
     pub async fn get(&self, key: &str) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
-        Ok(Box::new(
-            self.iroh_doc()
-                .get_one(Query::key_exact(key_to_bytes(key)))
-                .await
-                .map_err(Error::doc)?
-                .ok_or_else(|| Error::missing_key(key))?
-                .content_reader(self.iroh_doc())
-                .await
-                .map_err(Error::doc)?,
-        ))
+        match &self.engine {
+            StorageEngine::FS(storage) => storage.get(key).await,
+            StorageEngine::Iroh(storage) => storage.get(key).await,
+        }
     }
 
     pub async fn insert<S: AsyncRead + Send + Unpin>(&self, key: &str, value: S) -> Result<Hash> {
@@ -69,6 +63,13 @@ impl Storage {
         }
     }
 
+    pub async fn exists(&self, key: &str) -> Result<bool> {
+        match &self.engine {
+            StorageEngine::FS(storage) => Ok(storage.exists(key).await?.is_some()),
+            StorageEngine::Iroh(storage) => storage.exists(key).await,
+        }
+    }
+
     pub fn iroh_doc(&self) -> &IrohDoc {
         match &self.engine {
             StorageEngine::FS(storage) => storage.iroh_doc(),
@@ -79,7 +80,9 @@ impl Storage {
     pub async fn get_hash(&self, key: &str) -> Result<Option<(Hash, u64)>> {
         Ok(self
             .iroh_doc()
-            .get_one(Query::key_exact(key_to_bytes(key)))
+            .get_one(
+                Query::key_exact(key_to_bytes(key)).sort_by(SortBy::KeyAuthor, SortDirection::Asc),
+            )
             .await
             .map_err(Error::missing_key)?
             .map(|entry| (entry.content_hash(), entry.content_len())))

@@ -6,6 +6,7 @@ use iroh::client::LiveEvent;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::JoinHandle;
 use tracing::{info, info_span, warn, Instrument};
 
@@ -87,12 +88,16 @@ impl Mirroring {
                                         info!(action = "sent", sink = sink.name(), key = ?std::str::from_utf8(key));
                                     }
                                     if delete_after_mirroring {
-                                        if let Err(error) =
-                                            sync_client.blobs.delete_blob(*hash).await
-                                        {
-                                            warn!(error = ?error);
-                                            continue;
-                                        }
+                                        let sync_client = sync_client.clone();
+                                        let hash = hash.clone();
+                                        tokio::spawn(async move {
+                                            tokio::time::sleep(Duration::from_secs(120)).await;
+                                            if let Err(error) =
+                                                sync_client.blobs.delete_blob(hash).await
+                                            {
+                                                warn!(error = ?error);
+                                            }
+                                        });
                                     }
                                 }
                                 Err(error) => warn!(error = ?error),

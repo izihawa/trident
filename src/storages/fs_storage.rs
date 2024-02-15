@@ -11,14 +11,13 @@ use iroh::sync::store::Query;
 use iroh::sync::{AuthorId, ContentStatus};
 use lru::LruCache;
 use std::collections::{HashMap, HashSet};
-use std::io;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio_task_pool::Pool;
 use tokio_util::bytes;
-use tracing::{info, info_span, warn, Instrument};
+use tracing::{error, info, info_span, warn, Instrument};
 
 #[derive(Clone)]
 pub struct FSStorageEngine {
@@ -95,65 +94,69 @@ impl FSStorageEngine {
 
         let fs_storage_clone = fs_storage.clone();
 
-        tokio::spawn(async move {
-            let all_keys: Arc<HashSet<_>> = Arc::new(
-                fs_storage_clone
-                    .iroh_doc()
-                    .get_many(Query::all())
-                    .await
-                    .map_err(Error::doc)?
-                    .map(|x| bytes::Bytes::copy_from_slice(x.unwrap().key()))
-                    .collect()
-                    .await,
-            );
-            let pool = Arc::new(Pool::bounded(16));
+        if fs_storage_config.is_import_missing_enabled {
+            tokio::spawn(async move {
+                let all_keys: Arc<HashSet<_>> = Arc::new(
+                    fs_storage_clone
+                        .iroh_doc()
+                        .get_many(Query::all())
+                        .await
+                        .map_err(Error::doc)?
+                        .map(|x| bytes::Bytes::copy_from_slice(x.unwrap().key()))
+                        .collect()
+                        .await,
+                );
+                let pool = Arc::new(Pool::bounded(16));
 
-            for fs_shard in &fs_storage_clone.fs_shards.values() {
-                let fs_storage_clone = fs_storage_clone.clone();
-                let fs_shard = fs_shard.clone();
-                let all_keys = all_keys.clone();
-                let pool = pool.clone();
-                tokio::spawn(async move {
-                    let base_path = fs_shard.path().to_path_buf();
-                    let mut read_dir_stream = tokio::fs::read_dir(&base_path)
-                        .await
-                        .map_err(Error::io_error)?;
-                    while let Some(entry) = read_dir_stream
-                        .next_entry()
-                        .await
-                        .map_err(Error::io_error)?
-                    {
-                        let key = key_to_bytes(&entry.file_name().to_string_lossy());
-                        if all_keys.contains(&key) || key.starts_with(&[b'~']) {
-                            info!(action = "skipped", key = ?entry.file_name());
-                            continue;
-                        }
-                        pool.spawn({
-                            let iroh_doc = fs_storage_clone.iroh_doc().clone();
-                            async move {
-                                let import_progress = iroh_doc
-                                    .import_file(
-                                        fs_storage_clone.author_id,
-                                        key,
-                                        &entry.path(),
-                                        true,
-                                    )
-                                    .await
-                                    .map_err(Error::doc)
-                                    .unwrap();
-                                import_progress.finish().await.map_err(Error::hash).unwrap();
-                                info!(action = "imported", key = ?entry.file_name())
+                for fs_shard in fs_storage_clone.fs_shards.values() {
+                    let fs_storage_clone = fs_storage_clone.clone();
+                    let fs_shard = fs_shard.clone();
+                    let all_keys = all_keys.clone();
+                    let pool = pool.clone();
+                    tokio::spawn(async move {
+                        let base_path = fs_shard.path().to_path_buf();
+                        let mut read_dir_stream = tokio::fs::read_dir(&base_path)
+                            .await
+                            .map_err(Error::io_error)?;
+                        while let Some(entry) = read_dir_stream
+                            .next_entry()
+                            .await
+                            .map_err(Error::io_error)?
+                        {
+                            let key = key_to_bytes(&entry.file_name().to_string_lossy());
+                            if all_keys.contains(&key) || key.starts_with(&[b'~']) {
+                                continue;
                             }
-                            .instrument(info_span!(parent: None, "restore"))
-                        })
-                        .await
-                        .unwrap();
-                    }
-                    Ok::<(), Error>(())
-                });
-            }
-            Ok::<(), Error>(())
-        });
+                            pool.spawn({
+                                let iroh_doc = fs_storage_clone.iroh_doc().clone();
+                                async move {
+                                    let import_progress = iroh_doc
+                                        .import_file(
+                                            fs_storage_clone.author_id,
+                                            key,
+                                            &entry.path(),
+                                            true,
+                                        )
+                                        .await
+                                        .map_err(Error::doc)
+                                        .unwrap();
+                                    match import_progress.finish().await.map_err(Error::hash) {
+                                        Err(error) => error!(error = ?error, path = ?entry.path(), key = ?entry.file_name(), "import_progress_error"),
+                                        _ => {}
+                                    };
+                                    info!(action = "imported", key = ?entry.file_name())
+                                }
+                                    .instrument(info_span!(parent: None, "restore"))
+                            })
+                                .await
+                                .unwrap();
+                        }
+                        Ok::<(), Error>(())
+                    });
+                }
+                Ok::<(), Error>(())
+            });
+        }
         Ok(fs_storage)
     }
 
@@ -223,10 +226,15 @@ impl FSStorageEngine {
         })
     }
 
-    pub async fn exists(&self, key: &str) -> io::Result<Option<PathBuf>> {
+    pub async fn exists(&self, key: &str) -> Result<Option<PathBuf>> {
         for file_shard_config in self.hash_ring.range(key, 1) {
             let file_shard = &self.fs_shards[&file_shard_config.name];
-            if file_shard.exists(key).await?.is_some() {
+            if file_shard
+                .exists(key)
+                .await
+                .map_err(Error::io_error)?
+                .is_some()
+            {
                 return Ok(Some(file_shard.get_path_for(key)));
             }
         }
@@ -235,5 +243,17 @@ impl FSStorageEngine {
 
     pub fn iroh_doc(&self) -> &IrohDoc {
         &self.iroh_doc
+    }
+
+    pub async fn get(&self, key: &str) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
+        for file_shard_config in self.hash_ring.range(key, 1) {
+            let file_shard = &self.fs_shards[&file_shard_config.name];
+            match file_shard.open_store(key).await {
+                Ok(Some(file)) => return Ok(Box::new(file)),
+                Ok(None) => return Err(Error::io_error("missing file")),
+                Err(e) => return Err(Error::io_error(e)),
+            }
+        }
+        Err(Error::io_error("missing shard"))
     }
 }

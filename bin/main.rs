@@ -10,6 +10,7 @@ use axum::{
 };
 use clap::Parser;
 use futures::TryStreamExt;
+use iroh::sync::store::DownloadPolicy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,6 +19,7 @@ use tokio::sync::RwLock;
 use tokio_util::io::{ReaderStream, StreamReader};
 use tower_http::trace::{self, TraceLayer};
 use tracing::Level;
+use tracing_subscriber::EnvFilter;
 use trident_storage::config::{
     load_config, save_config, Config, MirroringConfig, SinkConfig, TableConfig,
 };
@@ -43,6 +45,7 @@ struct TablesCreateRequest {
 #[derive(Deserialize)]
 struct TablesImportRequest {
     ticket: String,
+    download_policy: DownloadPolicy,
     storage: Option<String>,
     mirroring: Option<MirroringConfig>,
 }
@@ -132,8 +135,16 @@ fn main() -> Result<(), Error> {
     // initialize tracing
     tracing_subscriber::fmt()
         .with_target(false)
+        .with_env_filter(EnvFilter::from_default_env())
         .compact()
         .init();
+    /*console_subscriber::ConsoleLayer::builder()
+    // set how long the console will retain data from completed tasks
+    .retention(Duration::from_secs(120))
+    // set the address the server is bound to
+    .server_addr(([0, 0, 0, 0], 6669))
+    // ... other configurations ...
+    .init();*/
     Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -205,6 +216,7 @@ async fn tables_import(
         .tables_import(
             &table,
             &tables_import_request.ticket,
+            tables_import_request.download_policy,
             tables_import_request.storage.as_deref(),
             tables_import_request.mirroring,
         )

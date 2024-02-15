@@ -57,10 +57,9 @@ class TridentClient(BaseClient):
         response = await self.get(url)
         return await response.json()
 
-    async def table_delete(self, table: str, key: str) -> dict:
+    async def table_delete(self, table: str, key: str):
         url = f"/tables/{table}/{key}/"
-        response = await self.delete(url)
-        return await response.json()
+        await self.delete(url)
 
     async def table_foreign_insert(self, from_table: str, from_key: str, to_table: str, to_key: str) -> bytes:
         url = f"/tables/foreign_insert/"
