@@ -20,7 +20,7 @@ aws-credential-types = { version = "1.0", features = ["hardcoded-credentials"] }
 axum = "0.7"
 bisection = "0.1"
 clap = { version = "4.4", features = ["derive"] }
-iroh = { version = "0.12.0", branch = "main", git = "https://github.com/n0-computer/iroh", features = [ "flat-db", "metrics" ] }
+iroh = { version = "0.12.0", branch = "main", git = "https://github.com/izihawa/iroh", features = [ "flat-db", "metrics" ] }
 iroh-io = { version = "0.3.0" }
 md5 = "0.7"
 percent-encoding = "2.3.1"

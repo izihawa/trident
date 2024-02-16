@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
+use iroh::bytes::store::ExportMode;
 use tokio::io::AsyncRead;
 use tokio_task_pool::Pool;
 use tokio_util::bytes;
@@ -76,7 +77,10 @@ impl Storage {
                 info!("started");
                 loop {
                     tokio::select! {
-                        _ = cancellation_token.cancelled() => return Ok::<(), Error>(()),
+                        _ = cancellation_token.cancelled() => {
+                            info!("cancel");
+                            return Ok::<(), Error>(())
+                        },
                         event = stream.next() => {
                             if let Some(event) = event {
                                 let event = event.unwrap();
@@ -92,14 +96,7 @@ impl Storage {
                                                 storage_clone.process_remote_entry(entry).await?;
                                                 storage_clone.process_sinks(entry).await;
                                             }
-                                            ContentStatus::Missing => {
-                                                if entry.content_len() > 0 {
-                                                    wait_list.put(entry.content_hash(), entry.clone());
-                                                } else {
-                                                    storage_clone.process_remote_entry(entry).await?;
-                                                }
-                                            }
-                                            ContentStatus::Incomplete => {
+                                            ContentStatus::Missing | ContentStatus::Incomplete => {
                                                 wait_list.put(entry.content_hash(), entry.clone());
                                             }
                                         };
@@ -115,7 +112,7 @@ impl Storage {
                                         };
                                         storage_clone.process_remote_entry(entry).await?;
                                         storage_clone.process_sinks(entry).await;
-                                        storage_clone.retain_blob_if_needed(entry).await;
+                                        storage_clone.retain_blob_if_needed(entry).await?;
                                     }
                                     _ => {}
                                 };
@@ -159,7 +156,10 @@ impl Storage {
 
                         loop {
                             tokio::select! {
-                                _ = cancellation_token.cancelled() => return Ok::<(), Error>(()),
+                                _ = cancellation_token.cancelled() => {
+                                    info!("cancel");
+                                    return Ok::<(), Error>(())
+                                },
                                 entry = read_dir_stream.next_entry() => {
                                     let entry = entry.map_err(Error::io_error)?;
                                     if let Some(entry) = entry {
@@ -231,7 +231,11 @@ impl Storage {
         } else {
             let file_shard_path = self.get_path(key).unwrap();
             self.iroh_doc()
-                .export_file(entry.clone(), file_shard_path.clone())
+                .export_file(
+                    entry.clone(),
+                    file_shard_path.clone(),
+                    ExportMode::TryReference,
+                )
                 .await
                 .map_err(Error::storage)?
                 .finish()
@@ -241,8 +245,9 @@ impl Storage {
         }
     }
 
-    async fn retain_blob_if_needed(&self, entry: &Entry) {
+    async fn retain_blob_if_needed(&self, entry: &Entry) -> Result<()> {
         if !self.keep_blob {
+            let key = std::str::from_utf8(bytes_to_key(entry.key())).unwrap();
             if let Err(error) = self
                 .sync_client
                 .blobs
@@ -251,7 +256,9 @@ impl Storage {
             {
                 warn!(error = ?error);
             }
+            self.delete_from_fs(key).await?;
         }
+        Ok(())
     }
 
     pub async fn delete_from_fs(&self, key: &str) -> Result<()> {

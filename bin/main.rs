@@ -21,7 +21,7 @@ use tokio_util::io::{ReaderStream, StreamReader};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tower_http::trace::{self, TraceLayer};
-use tracing::{info, Level};
+use tracing::{info, info_span, Instrument, Level};
 use tracing_subscriber::EnvFilter;
 use trident_storage::config::{load_config, save_config, Config, SinkConfig, TableConfig};
 use trident_storage::error::Error;
@@ -147,7 +147,10 @@ async fn app() -> Result<(), Error> {
         .unwrap();
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(cancellation_token, task_tracker))
+        .with_graceful_shutdown(
+            shutdown_signal(cancellation_token, task_tracker)
+                .instrument(info_span!(parent: None, "shutdown_signal")),
+        )
         .await
         .unwrap();
     Ok(())
@@ -175,8 +178,9 @@ async fn shutdown_signal(cancelation_token: CancellationToken, task_tracker: Tas
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-    info!("received_signal");
+    task_tracker.close();
     cancelation_token.cancel();
+    info!(tasks = task_tracker.len(), "stopping_tasks");
     task_tracker.wait().await;
     info!("stopped_tasks");
 }
