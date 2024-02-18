@@ -257,8 +257,8 @@ impl IrohNode {
         &mut self,
         table_name: &str,
         table_ticket: &str,
-        download_policy: DownloadPolicy,
         storage_name: &str,
+        download_policy: DownloadPolicy,
         sinks: Vec<String>,
         keep_blob: bool,
     ) -> Result<NamespaceId> {

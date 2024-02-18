@@ -38,8 +38,8 @@ class TridentClient(BaseClient):
         self,
         table: str,
         ticket: str,
+        storage: str,
         download_policy: dict | None = None,
-        storage: str = "default",
         sinks: tuple | list = tuple(),
         keep_blob: bool = True,
     ) -> bytes:
@@ -48,8 +48,8 @@ class TridentClient(BaseClient):
             url,
             json={
                 'ticket': ticket,
-                'download_policy': download_policy,
                 'storage': storage,
+                'download_policy': download_policy,
                 'sinks': sinks,
                 'keep_blob': keep_blob,
             },
