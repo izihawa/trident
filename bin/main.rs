@@ -8,11 +8,12 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use futures::TryStreamExt;
 use iroh::sync::store::DownloadPolicy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Builder;
 use tokio::signal;
@@ -23,7 +24,7 @@ use tokio_util::task::TaskTracker;
 use tower_http::trace::{self, TraceLayer};
 use tracing::{info, info_span, Instrument, Level};
 use tracing_subscriber::EnvFilter;
-use trident_storage::config::{load_config, save_config, Config, SinkConfig, TableConfig};
+use trident_storage::config::{Config, SinkConfig, TableConfig};
 use trident_storage::error::Error;
 
 use trident_storage::iroh_node::IrohNode;
@@ -33,12 +34,29 @@ fn return_true() -> bool {
 }
 
 /// Simple program to greet a person
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Config path
-    #[arg(short, long)]
-    config: String,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Launch server
+    Serve {
+        /// Config path
+        #[arg(short, long)]
+        config_path: PathBuf,
+    },
+    /// Generate default config
+    GenerateConfig {
+        /// Base path for Trident data
+        base_path: PathBuf,
+        /// The number of auto-generated sub-directories for keeping data
+        #[arg(default_value_t = 1)]
+        shards: u32,
+    },
 }
 
 #[derive(Deserialize)]
@@ -76,7 +94,7 @@ struct TablesForeignInsertRequest {
 struct AppState {
     iroh_node: Arc<RwLock<IrohNode>>,
     config: Arc<RwLock<Config>>,
-    config_path: String,
+    config_path: PathBuf,
 }
 
 #[derive(Serialize)]
@@ -94,69 +112,82 @@ struct TablesLsResponse {
     pub tables: HashMap<String, TableConfig>,
 }
 
-async fn create_app(
-    args: Args,
+async fn create_state(
+    config_path: &std::path::Path,
     cancellation_token: CancellationToken,
     task_tracker: TaskTracker,
 ) -> Result<AppState, Error> {
-    let config = Arc::new(RwLock::new(load_config(&args.config).await?));
+    let config = Arc::new(RwLock::new(Config::load_config(config_path).await?));
     let state = AppState {
         iroh_node: Arc::new(RwLock::new(
             IrohNode::new(config.clone(), cancellation_token, task_tracker).await?,
         )),
         config: config.clone(),
-        config_path: args.config.clone(),
+        config_path: config_path.to_path_buf(),
     };
-    save_config(&args.config, &config.read().await.clone()).await?;
+    config.read().await.save_config(config_path).await?;
     Ok(state)
 }
 
 async fn app() -> Result<(), Error> {
     let args = Args::parse();
-    let cancellation_token = CancellationToken::new();
-    let task_tracker = TaskTracker::new();
+    match args.command {
+        Commands::Serve {
+            config_path: config,
+        } => {
+            let cancellation_token = CancellationToken::new();
+            let task_tracker = TaskTracker::new();
 
-    let state = create_app(args, cancellation_token.clone(), task_tracker.clone()).await?;
-    let config = state.config.clone();
+            let state =
+                create_state(&config, cancellation_token.clone(), task_tracker.clone()).await?;
+            let config = state.config.clone();
 
-    // build our application with a route
-    let app = Router::new()
-        .route("/sinks/", get(sinks_ls))
-        .route("/sinks/:sink/", post(sinks_create))
-        .route("/tables/", get(tables_ls))
-        .route("/tables/:table/", post(tables_create))
-        .route("/tables/:table/", delete(tables_drop))
-        .route("/tables/:table/import/", post(tables_import))
-        .route("/tables/:table/", get(table_ls))
-        .route("/tables/:table/share/", get(table_share))
-        .route("/tables/:table/:key/", get(table_get))
-        .route("/tables/:table/:key/exists/", get(table_exists))
-        .route("/tables/:table/:key/", put(table_insert))
-        .route("/tables/:table/:key/", delete(table_delete))
-        .route("/tables/foreign_insert/", post(table_foreign_insert))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(trace::DefaultMakeSpan::new().level(Level::INFO))
-                .on_response(trace::DefaultOnResponse::new().level(Level::INFO)),
-        )
-        .with_state(state);
+            // build our application with a route
+            let app = Router::new()
+                .route("/sinks/", get(sinks_ls))
+                .route("/sinks/:sink/", post(sinks_create))
+                .route("/tables/", get(tables_ls))
+                .route("/tables/:table/", post(tables_create))
+                .route("/tables/:table/", delete(tables_drop))
+                .route("/tables/:table/import/", post(tables_import))
+                .route("/tables/:table/", get(table_ls))
+                .route("/tables/:table/share/", get(table_share))
+                .route("/tables/:table/:key/", get(table_get))
+                .route("/tables/:table/:key/exists/", get(table_exists))
+                .route("/tables/:table/:key/", put(table_insert))
+                .route("/tables/:table/:key/", delete(table_delete))
+                .route("/tables/foreign_insert/", post(table_foreign_insert))
+                .layer(
+                    TraceLayer::new_for_http()
+                        .make_span_with(trace::DefaultMakeSpan::new().level(Level::INFO))
+                        .on_response(trace::DefaultOnResponse::new().level(Level::INFO)),
+                )
+                .with_state(state);
 
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind(&config.read().await.http.endpoint)
-        .await
-        .unwrap();
+            // run our app with hyper, listening globally on port 3000
+            let listener = tokio::net::TcpListener::bind(&config.read().await.http.endpoint)
+                .await
+                .unwrap();
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(
-            shutdown_signal(cancellation_token, task_tracker)
-                .instrument(info_span!(parent: None, "shutdown_signal")),
-        )
-        .await
-        .unwrap();
+            axum::serve(listener, app)
+                .with_graceful_shutdown(
+                    shutdown_signal(cancellation_token, task_tracker)
+                        .instrument(info_span!(parent: None, "shutdown_signal")),
+                )
+                .await
+                .unwrap()
+        }
+        Commands::GenerateConfig { base_path, shards } => {
+            println!(
+                "{}",
+                serde_yaml::to_string(&Config::new(&base_path, shards)).expect("unreachable")
+            )
+        }
+    }
     Ok(())
 }
 
-async fn shutdown_signal(cancelation_token: CancellationToken, task_tracker: TaskTracker) {
+async fn shutdown_signal(cancellation_token: CancellationToken, task_tracker: TaskTracker) {
     let ctrl_c = async {
         signal::ctrl_c()
             .await
@@ -179,26 +210,18 @@ async fn shutdown_signal(cancelation_token: CancellationToken, task_tracker: Tas
         _ = terminate => {},
     }
     task_tracker.close();
-    cancelation_token.cancel();
+    cancellation_token.cancel();
     info!(tasks = task_tracker.len(), "stopping_tasks");
     task_tracker.wait().await;
     info!("stopped_tasks");
 }
 
 fn main() -> Result<(), Error> {
-    // initialize tracing
     tracing_subscriber::fmt()
         .with_target(false)
         .with_env_filter(EnvFilter::from_default_env())
         .compact()
         .init();
-    /*console_subscriber::ConsoleLayer::builder()
-    // set how long the console will retain data from completed tasks
-    .retention(Duration::from_secs(120))
-    // set the address the server is bound to
-    .server_addr(([0, 0, 0, 0], 6669))
-    // ... other configurations ...
-    .init();*/
     Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -225,7 +248,18 @@ async fn sinks_create(
         .sinks_create(&sink, sink_config)
         .await
     {
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => {
+            match state
+                .config
+                .read()
+                .await
+                .save_config(&state.config_path)
+                .await
+            {
+                Ok(_) => Response::builder().body(Body::default()).unwrap(),
+                Err(error) => error.into_response(),
+            }
+        }
         Err(e) => e.into_response(),
     }
 }
@@ -248,12 +282,18 @@ async fn tables_create(
         .await
     {
         Ok(id) => {
-            save_config(&state.config_path, &state.config.read().await.clone())
+            match state
+                .config
+                .read()
                 .await
-                .unwrap();
-            Response::builder()
-                .body(Body::from(id.to_string()))
-                .unwrap()
+                .save_config(&state.config_path)
+                .await
+            {
+                Ok(_) => Response::builder()
+                    .body(Body::from(id.to_string()))
+                    .unwrap(),
+                Err(error) => error.into_response(),
+            }
         }
         Err(e) => e.into_response(),
     }
@@ -279,12 +319,18 @@ async fn tables_import(
         .await
     {
         Ok(id) => {
-            save_config(&state.config_path, &state.config.read().await.clone())
+            match state
+                .config
+                .read()
                 .await
-                .unwrap();
-            Response::builder()
-                .body(Body::from(id.to_string()))
-                .unwrap()
+                .save_config(&state.config_path)
+                .await
+            {
+                Ok(_) => Response::builder()
+                    .body(Body::from(id.to_string()))
+                    .unwrap(),
+                Err(error) => error.into_response(),
+            }
         }
         Err(e) => e.into_response(),
     }
@@ -300,10 +346,16 @@ async fn tables_ls(State(state): State<AppState>) -> Response {
 async fn tables_drop(State(state): State<AppState>, Path(table): Path<String>) -> Response {
     match state.iroh_node.write().await.tables_drop(&table).await {
         Ok(()) => {
-            save_config(&state.config_path, &state.config.read().await.clone())
+            match state
+                .config
+                .read()
                 .await
-                .unwrap();
-            Response::builder().body(Body::default()).unwrap()
+                .save_config(&state.config_path)
+                .await
+            {
+                Ok(_) => Response::builder().body(Body::default()).unwrap(),
+                Err(error) => error.into_response(),
+            }
         }
         Err(e) => e.into_response(),
     }

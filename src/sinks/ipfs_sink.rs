@@ -43,11 +43,12 @@ impl Sink for IpfsSink {
 
         headers.insert("Abspath", path.to_string_lossy().parse().unwrap());
 
-        let file_part = reqwest::multipart::Part::bytes(tokio::fs::read(path).await.map_err(Error::io_error)?)
-            .file_name(encoded_key)
-            .headers(headers)
-            .mime_str("application/octet-stream")
-            .unwrap();
+        let file_part =
+            reqwest::multipart::Part::bytes(tokio::fs::read(path).await.map_err(Error::io_error)?)
+                .file_name(encoded_key)
+                .headers(headers)
+                .mime_str("application/octet-stream")
+                .unwrap();
         let form = reqwest::multipart::Form::new().part("file", file_part);
         let res = self
             .client
