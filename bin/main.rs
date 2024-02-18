@@ -71,7 +71,7 @@ struct TablesCreateRequest {
 #[derive(Deserialize)]
 struct TablesImportRequest {
     ticket: String,
-    download_policy: DownloadPolicy,
+    download_policy: Option<DownloadPolicy>,
     storage: String,
     #[serde(default)]
     sinks: Vec<String>,
@@ -311,7 +311,9 @@ async fn tables_import(
         .tables_import(
             &table,
             &tables_import_request.ticket,
-            tables_import_request.download_policy,
+            tables_import_request
+                .download_policy
+                .unwrap_or_else(|| DownloadPolicy::EverythingExcept(vec![])),
             &tables_import_request.storage,
             tables_import_request.sinks,
             tables_import_request.keep_blob,

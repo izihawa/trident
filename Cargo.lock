@@ -684,7 +684,7 @@ dependencies = [
  "bytes",
  "futures",
  "iroh-blake3",
- "iroh-io 0.4.0",
+ "iroh-io",
  "positioned-io",
  "range-collections",
  "self_cell",
@@ -2410,7 +2410,7 @@ dependencies = [
  "iroh-base",
  "iroh-bytes",
  "iroh-gossip",
- "iroh-io 0.4.0",
+ "iroh-io",
  "iroh-metrics",
  "iroh-net",
  "iroh-sync",
@@ -2487,7 +2487,7 @@ dependencies = [
  "genawaiter",
  "hex",
  "iroh-base",
- "iroh-io 0.4.0",
+ "iroh-io",
  "iroh-metrics",
  "iroh-net",
  "num_cpus",
@@ -2535,19 +2535,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
-]
-
-[[package]]
-name = "iroh-io"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19ace4f69567bfeb726672bab901d3e81be0c01119d860b2a10b7efb1553b880"
-dependencies = [
- "bytes",
- "futures",
- "pin-project",
- "smallvec",
- "tokio",
 ]
 
 [[package]]
@@ -5240,7 +5227,7 @@ dependencies = [
 
 [[package]]
 name = "trident-storage"
-version = "0.1.0"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5252,7 +5239,7 @@ dependencies = [
  "clap",
  "futures",
  "iroh",
- "iroh-io 0.3.0",
+ "iroh-io",
  "lru",
  "md5",
  "percent-encoding",

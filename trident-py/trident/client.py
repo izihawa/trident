@@ -29,16 +29,30 @@ class TridentClient(BaseClient):
         response = await self.get(f"/tables/")
         return await response.json()
 
-    async def tables_create(self, table: str, storage: str | None = None) -> bytes:
+    async def tables_create(self, table: str, storage: str) -> bytes:
         url = f"/tables/{table}/"
         response = await self.post(url, params={'storage': storage})
         return await response.read()
 
-    async def tables_import(self, table: str, ticket: str, storage: str | None = None, mirroring: dict | None = None) -> bytes:
+    async def tables_import(
+        self,
+        table: str,
+        ticket: str,
+        download_policy: dict | None = None,
+        storage: str = "default",
+        sinks: tuple | list = tuple(),
+        keep_blob: bool = True,
+    ) -> bytes:
         url = f"/tables/{table}/import/"
         response = await self.post(
             url,
-            params={'ticket': ticket, 'storage': storage, 'mirroring': mirroring},
+            json={
+                'ticket': ticket,
+                'download_policy': download_policy,
+                'storage': storage,
+                'sinks': sinks,
+                'keep_blob': keep_blob,
+            },
         )
         return await response.read()
 
