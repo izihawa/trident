@@ -93,9 +93,11 @@ class TridentClient(BaseClient):
         })
         return await response.read()
 
-    async def table_get(self, table: str, key: str, timeout: float = None) -> bytes:
+    async def table_get(self, table: str, key: str, timeout: float = None) -> bytes | None:
         url = f"/tables/{table}/{key}/"
         response = await self.get(url, timeout=timeout)
+        if response is None:
+            return None
         return await response.read()
 
     async def table_get_chunks(self, table: str, key: str, timeout: float = None) -> AsyncGenerator[bytes, None]:

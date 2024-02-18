@@ -72,7 +72,7 @@ pub struct HttpConfig {
 impl Default for HttpConfig {
     fn default() -> Self {
         HttpConfig {
-            endpoint: "127.0.0.1:80".to_string(),
+            endpoint: "0.0.0.0:80".to_string(),
         }
     }
 }
