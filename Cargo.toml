@@ -1,6 +1,6 @@
 [package]
 name = "trident-storage"
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 
 [lib]
@@ -21,6 +21,7 @@ axum = "0.7"
 bisection = "0.1"
 clap = { version = "4.4", features = ["derive"] }
 iroh = { version = "0.12.0", branch = "main", git = "https://github.com/izihawa/iroh", features = [ "flat-db", "metrics" ] }
+iroh-base = { version = "0.12.0", branch = "main", git = "https://github.com/izihawa/iroh" }
 iroh-io = { version = "0.4.0" }
 md5 = "0.7"
 percent-encoding = "2.3.1"

@@ -324,30 +324,13 @@ impl Storage {
     }
 
     pub async fn get(&self, key: &str) -> Result<Option<Box<dyn AsyncRead + Unpin + Send>>> {
-        match self
-            .iroh_doc
-            .get_one(Query::key_exact(key_to_bytes(key)))
-            .await
-            .map_err(Error::doc)?
-        {
-            Some(entry) => {
-                return Ok(Some(Box::new(
-                    entry
-                        .content_reader(self.iroh_doc())
-                        .await
-                        .map_err(Error::doc)?,
-                )))
-            }
-            None => {
-                if let Some(shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
-                    let shard = &self.shards[&shard_config.name];
-                    return match shard.open_store(key).await {
-                        Ok(Some(file)) => Ok(Some(Box::new(file))),
-                        Ok(None) => Ok(None),
-                        Err(e) => Err(Error::io_error(e)),
-                    };
-                }
-            }
+        if let Some(shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
+            let shard = &self.shards[&shard_config.name];
+            return match shard.open_store(key).await {
+                Ok(Some(file)) => Ok(Some(Box::new(file))),
+                Ok(None) => Ok(None),
+                Err(e) => Err(Error::io_error(e)),
+            };
         }
         Err(Error::io_error("missing shard"))
     }
