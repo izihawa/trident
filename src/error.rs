@@ -142,6 +142,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let code = match self {
             Error::MissingKey { .. } | Error::MissingTable { .. } => StatusCode::NOT_FOUND,
+            Error::ExistingTable { .. } => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (code, self.to_string()).into_response()

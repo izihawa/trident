@@ -104,6 +104,11 @@ struct TableExistsResponse {
 }
 
 #[derive(Serialize)]
+struct TablesExistsResponse {
+    pub exists: bool,
+}
+
+#[derive(Serialize)]
 struct SinksLsResponse {
     pub sinks: HashMap<String, SinkConfig>,
 }
@@ -149,6 +154,7 @@ async fn app() -> Result<(), Error> {
                 .route("/sinks/:sink/", post(sinks_create))
                 .route("/tables/", get(tables_ls))
                 .route("/tables/:table/", post(tables_create))
+                .route("/tables/:table/exists/", get(tables_exists))
                 .route("/tables/:table/", delete(tables_drop))
                 .route("/tables/:table/import/", post(tables_import))
                 .route("/tables/:table/", get(table_ls))
@@ -298,6 +304,13 @@ async fn tables_create(
         }
         Err(e) => e.into_response(),
     }
+}
+
+async fn tables_exists(State(state): State<AppState>, Path(table): Path<String>) -> Response {
+    Json(TablesExistsResponse {
+        exists: state.iroh_node.read().await.tables_exists(&table).await,
+    })
+    .into_response()
 }
 
 async fn tables_import(

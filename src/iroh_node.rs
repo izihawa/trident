@@ -253,6 +253,10 @@ impl IrohNode {
         }
     }
 
+    pub async fn tables_exists(&self, table_name: &str) -> bool {
+        return self.table_storages.get(table_name).is_some();
+    }
+
     pub async fn tables_import(
         &mut self,
         table_name: &str,

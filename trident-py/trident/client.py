@@ -34,6 +34,14 @@ class TridentClient(BaseClient):
         response = await self.post(url, params={'storage': storage})
         return await response.read()
 
+    async def tables_exists(self, table: str) -> bool:
+        url = f"/tables/{table}/exists/"
+        response = await self.get(url)
+        if response is None:
+            return False
+        response = await response.json()
+        return response["exists"]
+
     async def tables_import(
         self,
         table: str,
