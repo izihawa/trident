@@ -13,8 +13,7 @@ fn return_true() -> bool {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StorageEngineConfig {
-    pub replicas: u8,
-    pub fs_shards: Vec<ShardConfig>,
+    pub shards: Vec<ShardConfig>,
     #[serde(default = "return_false")]
     pub is_import_missing_enabled: bool,
 }
@@ -83,7 +82,7 @@ pub struct IrohConfig {
     #[serde(default = "HashMap::new")]
     pub sinks: HashMap<String, SinkConfig>,
     #[serde(default = "HashMap::new")]
-    pub fs_storages: HashMap<String, StorageEngineConfig>,
+    pub storages: HashMap<String, StorageEngineConfig>,
     pub gc_interval_secs: Option<u64>,
 }
 
@@ -103,7 +102,7 @@ pub async fn load_config(config_path: &str) -> Result<Config, Error> {
 pub async fn save_config(config_path: &str, config: &Config) -> Result<(), Error> {
     tokio::fs::write(
         config_path,
-        serde_yaml::to_string(config).unwrap().as_bytes(),
+        serde_yaml::to_string(config).expect("unreachable").as_bytes(),
     )
     .await
     .map_err(Error::io_error)

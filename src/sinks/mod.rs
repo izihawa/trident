@@ -11,5 +11,5 @@ pub use s3_sink::S3Sink;
 #[async_trait]
 pub trait Sink: Send + Sync {
     fn name(&self) -> &str;
-    async fn send(&self, key: &[u8], path: &Path) -> Result<(), Error>;
+    async fn send(&self, key: &str, path: &Path) -> Result<(), Error>;
 }

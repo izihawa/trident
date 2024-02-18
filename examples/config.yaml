@@ -9,10 +9,9 @@ iroh:
   max_rpc_connections: 32
   max_rpc_streams: 1024
   sinks: {}
-  fs_storages:
+  storages:
     default:
-      replicas: 1
-      fs_shards:
+      shards:
       - name: shard1
         path: /tmp/trident/data/shard1
         weight: 1

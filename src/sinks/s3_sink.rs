@@ -1,7 +1,7 @@
 use crate::config::S3Config;
 use crate::error::Error;
 use crate::sinks::Sink;
-use crate::utils::{bytes_to_key, FRAGMENT};
+use crate::utils::FRAGMENT;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
@@ -52,13 +52,12 @@ impl Sink for S3Sink {
         &self.name
     }
 
-    async fn send(&self, key: &[u8], path: &Path) -> Result<(), Error> {
+    async fn send(&self, key: &str, path: &Path) -> Result<(), Error> {
         // ToDo: Remove allocating and return stream
         // https://github.com/awslabs/aws-sdk-rust/discussions/361
-        let encoded_key =
-            utf8_percent_encode(std::str::from_utf8(bytes_to_key(key)).unwrap(), FRAGMENT)
-                .collect::<String>()
-                .to_lowercase();
+        let encoded_key = utf8_percent_encode(key, FRAGMENT)
+            .collect::<String>()
+            .to_lowercase();
         let body = ByteStream::from_path(Path::new(path))
             .await
             .map_err(Error::sink)?;

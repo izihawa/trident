@@ -1,7 +1,7 @@
 use crate::config::IpfsConfig;
 use crate::error::Error;
 use crate::sinks::Sink;
-use crate::utils::{bytes_to_key, FRAGMENT};
+use crate::utils::FRAGMENT;
 use axum::async_trait;
 use percent_encoding::utf8_percent_encode;
 use reqwest::header::HeaderMap;
@@ -32,19 +32,18 @@ impl Sink for IpfsSink {
         &self.name
     }
 
-    async fn send(&self, key: &[u8], path: &Path) -> Result<(), Error> {
+    async fn send(&self, key: &str, path: &Path) -> Result<(), Error> {
         // ToDo: Remove allocating and return stream
         // https://github.com/awslabs/aws-sdk-rust/discussions/361
-        let encoded_key =
-            utf8_percent_encode(std::str::from_utf8(bytes_to_key(key)).unwrap(), FRAGMENT)
-                .collect::<String>()
-                .to_lowercase();
+        let encoded_key = utf8_percent_encode(key, FRAGMENT)
+            .collect::<String>()
+            .to_lowercase();
 
         let mut headers = HeaderMap::new();
 
         headers.insert("Abspath", path.to_string_lossy().parse().unwrap());
 
-        let file_part = reqwest::multipart::Part::bytes(tokio::fs::read(path).await.unwrap())
+        let file_part = reqwest::multipart::Part::bytes(tokio::fs::read(path).await.map_err(Error::io_error)?)
             .file_name(encoded_key)
             .headers(headers)
             .mime_str("application/octet-stream")
@@ -61,7 +60,8 @@ impl Sink for IpfsSink {
             .await
             .map_err(Error::sink)?;
         if !res.status().is_success() {
-            return Err(Error::sink(res.text().await.unwrap()));
+            let res_text = res.text().await.map_err(Error::sink)?;
+            return Err(Error::sink(res_text));
         }
         Ok(())
     }

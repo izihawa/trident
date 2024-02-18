@@ -19,8 +19,6 @@ pub enum Error {
     TableTicket { description: String },
     #[error("blobs: {description}")]
     Blobs { description: String },
-    #[error("hash_error: {description}")]
-    Hash { description: String },
     #[error("entry_error: {description}")]
     Entry { description: String },
     #[error("io_error: {description}")]
@@ -39,6 +37,8 @@ pub enum Error {
     ExistingTable { description: String },
     #[error("storage: {description}")]
     Storage { description: String },
+    #[error("key: {description}")]
+    IncorrectKey { description: String },
 }
 
 impl Error {
@@ -74,12 +74,6 @@ impl Error {
 
     pub fn blobs(error: impl Display) -> Self {
         Error::Blobs {
-            description: error.to_string(),
-        }
-    }
-
-    pub fn hash(error: impl Display) -> Self {
-        Error::Hash {
             description: error.to_string(),
         }
     }
@@ -133,6 +127,12 @@ impl Error {
 
     pub fn storage(error: impl Display) -> Self {
         Error::Storage {
+            description: error.to_string(),
+        }
+    }
+
+    pub fn incorrect_key(error: impl Display) -> Self {
+        Error::IncorrectKey {
             description: error.to_string(),
         }
     }

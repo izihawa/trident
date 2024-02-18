@@ -2,7 +2,6 @@ use crate::config::{Config, SinkConfig, StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
 use crate::sinks::{IpfsSink, S3Sink, Sink};
 use crate::storage::Storage;
-use crate::utils::bytes_to_key;
 use crate::IrohClient;
 use async_stream::stream;
 use futures::StreamExt;
@@ -113,7 +112,7 @@ impl IrohNode {
         }
 
         let author_id = match &config_lock.iroh.author {
-            Some(author) => AuthorId::from_str(author).unwrap(),
+            Some(author) => AuthorId::from_str(author).map_err(Error::author)?,
             None => {
                 let author_id = sync_client.authors.create().await.map_err(Error::author)?;
                 config_lock.iroh.author = Some(author_id.to_string());
@@ -136,14 +135,14 @@ impl IrohNode {
         }
 
         let mut table_storages = HashMap::new();
-        let storage_configs = config_lock.iroh.fs_storages.clone();
+        let storage_configs = config_lock.iroh.storages.clone();
         for (table_name, table_config) in &mut config_lock.iroh.tables {
             let iroh_doc = sync_client
                 .docs
-                .open(NamespaceId::from_str(&table_config.id).unwrap())
+                .open(NamespaceId::from_str(&table_config.id).map_err(Error::storage)?)
                 .await
                 .map_err(Error::table)?
-                .unwrap();
+                .ok_or_else(|| Error::table(format!("{} does not exist", table_config.id)))?;
             iroh_doc
                 .set_download_policy(table_config.download_policy.clone())
                 .await
@@ -169,7 +168,7 @@ impl IrohNode {
             table_storages.insert(table_name.clone(), storage_engine);
         }
 
-        let fs_storage_configs = config_lock.iroh.fs_storages.clone();
+        let fs_storage_configs = config_lock.iroh.storages.clone();
 
         drop(config_lock);
 
@@ -396,10 +395,15 @@ impl IrohNode {
     }
 
     pub fn table_keys(&self, table_name: &str) -> Option<impl Stream<Item = Result<String>>> {
-        self.table_storages.get(table_name).cloned().map_or_else(|| None, |table_storage| Some(stream! {
-        for await el in table_storage.get_all() {
-            yield Ok(format!("{}\n", std::str::from_utf8(bytes_to_key(el.unwrap().key())).unwrap()))
-            }
-        }))
+        self.table_storages.get(table_name).cloned().map_or_else(
+            || None,
+            |table_storage| {
+                Some(stream! {
+                for await el in table_storage.get_all() {
+                    yield Ok(format!("{}\n", std::str::from_utf8(el.unwrap().key()).unwrap()))
+                    }
+                })
+            },
+        )
     }
 }
