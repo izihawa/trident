@@ -4,16 +4,16 @@ Key-value storage with seeding capabilities.
 
 Let's say we have master node A and following nodes Bx
 
+```
 A: Insert key K1 with value V1 into table T1
-
-... magic
-
+... <magic happens> ...
 B1: Received K1-V1 from A
 B2: Received K1-V1 from B1
-
 ...
-
 B10: Received K1-V1 from B5
+```
+
+Group of peers create swarm around the table and can leech data from each other.
 
 # How it works
 
