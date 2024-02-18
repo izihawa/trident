@@ -22,9 +22,9 @@ replicating key-value stream over open set of peers in the Internet.
 
 ## Concepts
 
-`author` - entity, identified by its key and allowed to read and/or write to table
-`table` - an ordered key-value storage that may be replicated
-`key` - any valid UTF8 string
-`value` - any bytes
-`table ticket` - unique string allowing anyone in the Internet to start replication of table to its instance of Trident
+- `author` - entity, identified by its key and allowed to read and/or write to table
+- `table` - an ordered key-value storage that may be replicated
+- `key` - any valid UTF8 string
+- `value` - any bytes
+- `table ticket` - unique string allowing anyone in the Internet to start replication of table to its instance of Trident
 
