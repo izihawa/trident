@@ -282,6 +282,7 @@ impl Storage {
             .del(self.author_id, key_to_bytes(key))
             .await
             .map_err(Error::missing_key)?;
+        self.delete_from_fs(key).await?;
         Ok(removed_items)
     }
 
