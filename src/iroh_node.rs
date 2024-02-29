@@ -59,11 +59,11 @@ impl IrohNode {
         let docs = iroh::sync::store::fs::Store::new(&docs_path).map_err(Error::node_create)?;
 
         let blob_path =
-            iroh::util::path::IrohPaths::BaoFlatStoreDir.with_root(&config_lock.iroh.path);
+            iroh::util::path::IrohPaths::BaoStoreDir.with_root(&config_lock.iroh.path);
         tokio::fs::create_dir_all(&blob_path)
             .await
             .map_err(Error::node_create)?;
-        let db = iroh::bytes::store::flat::Store::load(&blob_path)
+        let db = iroh::bytes::store::redb::Store::load(&blob_path)
             .await
             .map_err(Error::node_create)?;
 
