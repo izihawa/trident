@@ -2419,7 +2419,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2478,7 +2478,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2508,7 +2508,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2547,7 +2547,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2588,7 +2588,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -2608,7 +2608,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "aead",
  "anyhow",
@@ -2683,7 +2683,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#ce3825c64e3b366658b253307ef92ebb06203540"
+source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3180,9 +3180,9 @@ checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "opaque-debug"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
+checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "openssl-probe"
@@ -3947,13 +3947,13 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "767be24c0da52e7448d495b8d162506a9aa125426651d547d545d6c2b4b65b62"
+checksum = "52b1349400e2ffd64a9fb5ed9008e33c0b8ef86bd5bae8f73080839c7082f1d5"
 dependencies = [
  "cfg-if",
  "rustix",
- "windows 0.52.0",
+ "windows 0.54.0",
 ]
 
 [[package]]
@@ -5262,7 +5262,7 @@ dependencies = [
 
 [[package]]
 name = "trident-storage"
-version = "0.0.10"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5648,6 +5648,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows"
+version = "0.54.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9252e5725dbed82865af151df558e754e4a3c2c30818359eb17465f1346a1b49"
+dependencies = [
+ "windows-core 0.54.0",
+ "windows-targets 0.52.4",
+]
+
+[[package]]
 name = "windows-core"
 version = "0.51.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5662,6 +5672,16 @@ version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
 dependencies = [
+ "windows-targets 0.52.4",
+]
+
+[[package]]
+name = "windows-core"
+version = "0.54.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12661b9c89351d684a50a8a643ce5f608e20243b9fb84687800163429f161d65"
+dependencies = [
+ "windows-result",
  "windows-targets 0.52.4",
 ]
 
@@ -5685,6 +5705,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.52",
+]
+
+[[package]]
+name = "windows-result"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd19df78e5168dfb0aedc343d1d1b8d422ab2db6756d2dc3fef75035402a3f64"
+dependencies = [
+ "windows-targets 0.52.4",
 ]
 
 [[package]]
