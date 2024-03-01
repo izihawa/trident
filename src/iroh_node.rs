@@ -58,8 +58,7 @@ impl IrohNode {
         let docs_path = iroh::util::path::IrohPaths::DocsDatabase.with_root(&config_lock.iroh.path);
         let docs = iroh::sync::store::fs::Store::new(&docs_path).map_err(Error::node_create)?;
 
-        let blob_path =
-            iroh::util::path::IrohPaths::BaoStoreDir.with_root(&config_lock.iroh.path);
+        let blob_path = iroh::util::path::IrohPaths::BaoStoreDir.with_root(&config_lock.iroh.path);
         tokio::fs::create_dir_all(&blob_path)
             .await
             .map_err(Error::node_create)?;

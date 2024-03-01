@@ -11,7 +11,7 @@ use iroh::bytes::store::ExportMode;
 use iroh::bytes::Hash;
 use iroh::client::{Entry, LiveEvent};
 use iroh::rpc_protocol::ShareMode;
-use iroh::sync::store::Query;
+use iroh::sync::store::{Query, SortBy, SortDirection};
 use iroh::sync::{AuthorId, ContentStatus};
 use iroh::ticket::DocTicket;
 use lru::LruCache;
@@ -332,6 +332,21 @@ impl Storage {
                 Ok(None) => Ok(None),
                 Err(e) => Err(Error::io_error(e)),
             };
+        }
+        let entry = self
+            .iroh_doc
+            .get_one(
+                Query::key_exact(key_to_bytes(key)).sort_by(SortBy::KeyAuthor, SortDirection::Asc),
+            )
+            .await
+            .map_err(Error::storage)?;
+        if let Some(entry) = entry {
+            return Ok(Some(Box::new(
+                entry
+                    .content_reader(&self.sync_client)
+                    .await
+                    .map_err(Error::io_error)?,
+            )));
         }
         Err(Error::io_error("missing shard"))
     }
