@@ -327,11 +327,11 @@ impl Storage {
     pub async fn get(&self, key: &str) -> Result<Option<Box<dyn AsyncRead + Unpin + Send>>> {
         if let Some(shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
             let shard = &self.shards[&shard_config.name];
-            return match shard.open_store(key).await {
-                Ok(Some(file)) => Ok(Some(Box::new(file))),
-                Ok(None) => Ok(None),
-                Err(e) => Err(Error::io_error(e)),
-            };
+            match shard.open_store(key).await {
+                Ok(Some(file)) => return Ok(Some(Box::new(file))),
+                Err(e) => return Err(Error::io_error(e)),
+                Ok(None) => {}
+            }
         }
         let entry = self
             .iroh_doc
