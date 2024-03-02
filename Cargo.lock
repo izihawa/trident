@@ -2419,7 +2419,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2478,7 +2478,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2508,7 +2508,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2547,7 +2547,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2588,7 +2588,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -2608,7 +2608,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "aead",
  "anyhow",
@@ -2683,7 +2683,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.12.0"
-source = "git+https://github.com/n0-computer/iroh?branch=bao-file#90f0de60f91a7f361a4db7464be1d3db6303c996"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#ce38dc0f92ef73d55c1139f9646019cfa6254288"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2901,9 +2901,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "wasi",
@@ -3370,9 +3370,9 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "pest"
-version = "2.7.7"
+version = "2.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "219c0dcc30b6a27553f9cc242972b67f75b60eb0db71f0b5462f38b058c41546"
+checksum = "56f8023d0fb78c8e03784ea1c7f3fa36e68a723138990b8d5a47d916b651e7a8"
 dependencies = [
  "memchr",
  "thiserror",
@@ -3381,9 +3381,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.7.7"
+version = "2.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e1288dbd7786462961e69bfd4df7848c1e37e8b74303dbdab82c3a9cdd2809"
+checksum = "b0d24f72393fd16ab6ac5738bc33cdb6a9aa73f8b902e8fe29cf4e67d7dd1026"
 dependencies = [
  "pest",
  "pest_generator",
@@ -3391,9 +3391,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.7.7"
+version = "2.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1381c29a877c6d34b8c176e734f35d7f7f5b3adaefe940cb4d1bb7af94678e2e"
+checksum = "fdc17e2a6c7d0a492f0158d7a4bd66cc17280308bbaff78d5bef566dca35ab80"
 dependencies = [
  "pest",
  "pest_meta",
@@ -3404,9 +3404,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.7.7"
+version = "2.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0934d6907f148c22a3acbda520c7eed243ad7487a30f51f6ce52b58b7077a8a"
+checksum = "934cd7631c050f4674352a6e835d5f6711ffbfb9345c2fc0107155ac495ae293"
 dependencies = [
  "once_cell",
  "pest",
@@ -5262,7 +5262,7 @@ dependencies = [
 
 [[package]]
 name = "trident-storage"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5456,9 +5456,9 @@ checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
 
 [[package]]
 name = "walkdir"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d71d857dc86794ca4c280d616f7da00d2dbfd8cd788846559a6813e6aa4b54ee"
+checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",

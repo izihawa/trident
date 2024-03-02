@@ -132,7 +132,6 @@ impl IrohNode {
                 }
             };
         }
-
         let mut table_storages = HashMap::new();
         let storage_configs = config_lock.iroh.storages.clone();
         for (table_name, table_config) in &mut config_lock.iroh.tables {
@@ -146,6 +145,7 @@ impl IrohNode {
                 .set_download_policy(table_config.download_policy.clone())
                 .await
                 .map_err(Error::doc)?;
+
             iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
             let materialised_sinks = table_config
                 .sinks
@@ -159,7 +159,7 @@ impl IrohNode {
                 sync_client.clone(),
                 storage_configs[&table_config.storage_name].clone(),
                 materialised_sinks,
-                table_config.keep_blob,
+                table_config.clone(),
                 cancellation_token.clone(),
                 task_tracker.clone(),
             )
@@ -223,6 +223,13 @@ impl IrohNode {
                     .iter()
                     .map(|sink_name| self.sinks[sink_name].clone())
                     .collect();
+                let table_config = TableConfig {
+                    id: iroh_doc.id().to_string(),
+                    download_policy: DownloadPolicy::default(),
+                    sinks,
+                    storage_name: storage_name.to_string(),
+                    keep_blob,
+                };
                 let storage_engine = Storage::new(
                     table_name,
                     self.author_id,
@@ -230,22 +237,18 @@ impl IrohNode {
                     self.sync_client.clone(),
                     self.fs_storage_configs[storage_name].clone(),
                     materialised_sinks,
-                    keep_blob,
+                    table_config.clone(),
                     self.cancellation_token.clone(),
                     self.task_tracker.clone(),
                 )
                 .await?;
                 entry.insert(storage_engine);
-                self.config.write().await.iroh.tables.insert(
-                    table_name.to_string(),
-                    TableConfig {
-                        id: iroh_doc.id().to_string(),
-                        download_policy: DownloadPolicy::default(),
-                        sinks,
-                        storage_name: storage_name.to_string(),
-                        keep_blob,
-                    },
-                );
+                self.config
+                    .write()
+                    .await
+                    .iroh
+                    .tables
+                    .insert(table_name.to_string(), table_config);
 
                 Ok(iroh_doc.id())
             }
@@ -265,13 +268,25 @@ impl IrohNode {
         sinks: Vec<String>,
         keep_blob: bool,
     ) -> Result<NamespaceId> {
+        let ticket = DocTicket::from_str(table_ticket).map_err(Error::doc)?;
         match self.table_storages.entry(table_name.to_string()) {
-            Entry::Occupied(_) => Err(Error::existing_table(table_name)),
+            Entry::Occupied(entry) => {
+                if entry.get().iroh_doc().id() != ticket.capability.id() {
+                    return Err(Error::existing_table(table_name));
+                }
+                entry
+                    .get()
+                    .iroh_doc()
+                    .start_sync(ticket.nodes)
+                    .await
+                    .map_err(Error::doc)?;
+                Ok(entry.get().iroh_doc().id())
+            }
             Entry::Vacant(entry) => {
                 let iroh_doc = self
                     .sync_client
                     .docs
-                    .import(DocTicket::from_str(table_ticket).map_err(Error::doc)?)
+                    .import(ticket)
                     .await
                     .map_err(Error::table)?;
                 iroh_doc
@@ -282,6 +297,13 @@ impl IrohNode {
                     .iter()
                     .map(|sink_name| self.sinks[sink_name].clone())
                     .collect();
+                let table_config = TableConfig {
+                    id: iroh_doc.id().to_string(),
+                    download_policy,
+                    sinks,
+                    storage_name: storage_name.to_string(),
+                    keep_blob,
+                };
                 let storage_engine = Storage::new(
                     table_name,
                     self.author_id,
@@ -289,23 +311,18 @@ impl IrohNode {
                     self.sync_client.clone(),
                     self.fs_storage_configs[storage_name].clone(),
                     materialised_sinks,
-                    keep_blob,
+                    table_config.clone(),
                     self.cancellation_token.clone(),
                     self.task_tracker.clone(),
                 )
                 .await?;
                 entry.insert(storage_engine);
-                self.config.write().await.iroh.tables.insert(
-                    table_name.to_string(),
-                    TableConfig {
-                        id: iroh_doc.id().to_string(),
-                        download_policy,
-                        sinks,
-                        storage_name: storage_name.to_string(),
-                        keep_blob,
-                    },
-                );
-
+                self.config
+                    .write()
+                    .await
+                    .iroh
+                    .tables
+                    .insert(table_name.to_string(), table_config);
                 Ok(iroh_doc.id())
             }
         }
@@ -327,7 +344,7 @@ impl IrohNode {
                     .iroh
                     .tables
                     .remove(table_name)
-                    .unwrap())
+                    .ok_or_else(|| Error::missing_table(table_name))?)
             }
         }?;
         Ok(())

@@ -1,4 +1,4 @@
-use crate::config::StorageEngineConfig;
+use crate::config::{StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
 use crate::file_shard::FileShard;
 use crate::hash_ring::HashRing;
@@ -10,10 +10,13 @@ use futures::{Stream, StreamExt};
 use iroh::bytes::store::ExportMode;
 use iroh::bytes::Hash;
 use iroh::client::{Entry, LiveEvent};
-use iroh::rpc_protocol::ShareMode;
+use iroh::net::key::PublicKey;
+use iroh::net::NodeAddr;
+use iroh::rpc_protocol::{BlobDownloadRequest, DownloadLocation, SetTagOption, ShareMode};
 use iroh::sync::store::{Query, SortBy, SortDirection};
 use iroh::sync::{AuthorId, ContentStatus};
 use iroh::ticket::DocTicket;
+use iroh_base::hash::BlobFormat;
 use lru::LruCache;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
@@ -34,7 +37,7 @@ pub struct Storage {
     hash_ring: HashRing,
     shards: HashMap<String, FileShard>,
     sinks: Vec<Arc<dyn Sink>>,
-    keep_blob: bool,
+    table_config: TableConfig,
 }
 
 impl Storage {
@@ -45,7 +48,7 @@ impl Storage {
         sync_client: IrohClient,
         storage_config: StorageEngineConfig,
         sinks: Vec<Arc<dyn Sink>>,
-        keep_blob: bool,
+        table_config: TableConfig,
         cancellation_token: CancellationToken,
         task_tracker: TaskTracker,
     ) -> Result<Self> {
@@ -63,7 +66,7 @@ impl Storage {
             hash_ring: HashRing::with_hasher(storage_config.shards.iter()),
             shards,
             sinks,
-            keep_blob,
+            table_config,
         };
         let storage_clone = storage.clone();
         let mut stream = storage_clone
@@ -254,7 +257,7 @@ impl Storage {
     }
 
     async fn retain_blob_if_needed(&self, key: &str, hash: Hash) -> Result<()> {
-        if !self.keep_blob {
+        if !self.table_config.keep_blob {
             if let Err(error) = self.sync_client.blobs.delete_blob(hash).await {
                 warn!(error = ?error);
             }
@@ -325,13 +328,17 @@ impl Storage {
     }
 
     pub async fn get(&self, key: &str) -> Result<Option<Box<dyn AsyncRead + Unpin + Send>>> {
-        if let Some(shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
-            let shard = &self.shards[&shard_config.name];
-            match shard.open_store(key).await {
-                Ok(Some(file)) => return Ok(Some(Box::new(file))),
-                Err(e) => return Err(Error::io_error(e)),
-                Ok(None) => {}
-            }
+        let first_shard_path = self
+            .hash_ring
+            .range(key, 1)
+            .into_iter()
+            .next()
+            .ok_or_else(|| Error::storage("no shards"))?;
+        let shard = &self.shards[&first_shard_path.name];
+        match shard.open_store(key).await {
+            Ok(Some(file)) => return Ok(Some(Box::new(file))),
+            Err(e) => return Err(Error::io_error(e)),
+            Ok(None) => {}
         }
         let entry = self
             .iroh_doc
@@ -339,16 +346,49 @@ impl Storage {
                 Query::key_exact(key_to_bytes(key)).sort_by(SortBy::KeyAuthor, SortDirection::Asc),
             )
             .await
-            .map_err(Error::storage)?;
+            .map_err(Error::entry)?;
         if let Some(entry) = entry {
+            if let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await {
+                for peer in peers {
+                    let node_addr = match PublicKey::from_bytes(&peer) {
+                        Ok(public_key) => NodeAddr::new(public_key),
+                        Err(_signing_error) => {
+                            warn!("potential db corruption: peers per doc can't be decoded");
+                            continue;
+                        }
+                    };
+                    let progress = self
+                        .sync_client
+                        .blobs
+                        .download(BlobDownloadRequest {
+                            hash: entry.content_hash(),
+                            format: BlobFormat::Raw,
+                            peer: node_addr,
+                            tag: SetTagOption::Auto,
+                            out: DownloadLocation::External {
+                                path: shard.get_path_for(key),
+                                in_place: true,
+                            },
+                        })
+                        .await
+                        .map_err(Error::io_error)?;
+                    match progress.finish().await.map_err(Error::storage) {
+                        Ok(_) => break,
+                        Err(e) => {
+                            eprintln!("{:?}", e);
+                            panic!()
+                        }
+                    }
+                }
+            }
             return Ok(Some(Box::new(
                 entry
                     .content_reader(&self.sync_client)
                     .await
-                    .map_err(Error::io_error)?,
+                    .map_err(Error::storage)?,
             )));
         }
-        Err(Error::io_error("missing shard"))
+        Ok(None)
     }
 
     pub fn get_all(&self) -> impl Stream<Item = Result<Entry>> {

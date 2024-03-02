@@ -48,7 +48,7 @@ impl Sink for IpfsSink {
                 .file_name(encoded_key)
                 .headers(headers)
                 .mime_str("application/octet-stream")
-                .unwrap();
+                .map_err(Error::sink)?;
         let form = reqwest::multipart::Form::new().part("file", file_part);
         let res = self
             .client

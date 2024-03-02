@@ -29,8 +29,11 @@ impl FileShard {
     }
 
     pub fn get_path_for(&self, key: &str) -> PathBuf {
-        self.path
-            .join(utf8_percent_encode(key, FRAGMENT).collect::<String>())
+        self.path.join(
+            utf8_percent_encode(key, FRAGMENT)
+                .collect::<String>()
+                .to_lowercase(),
+        )
     }
 
     pub async fn open_store(&self, key: &str) -> io::Result<Option<File>> {
