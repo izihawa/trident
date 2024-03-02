@@ -271,15 +271,16 @@ impl IrohNode {
         let ticket = DocTicket::from_str(table_ticket).map_err(Error::doc)?;
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(entry) => {
-                if entry.get().iroh_doc().id() != ticket.capability.id() {
+                let iroh_doc = entry.get().iroh_doc();
+                if iroh_doc.id() != ticket.capability.id() {
                     return Err(Error::existing_table(table_name));
                 }
-                entry
-                    .get()
-                    .iroh_doc()
+                iroh_doc
                     .start_sync(ticket.nodes)
                     .await
                     .map_err(Error::doc)?;
+                let storage0 = entry.get().clone();
+                tokio::spawn(async move { storage0.download_missing().await });
                 Ok(entry.get().iroh_doc().id())
             }
             Entry::Vacant(entry) => {
