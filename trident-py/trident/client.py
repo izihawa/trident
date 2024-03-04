@@ -70,7 +70,7 @@ class TridentClient(BaseClient):
         return await response.read()
 
     async def table_insert(self, table: str, key: str, value: bytes) -> bytes:
-        url = f"/tables/{table}/{key}/"
+        url = f"/tables/{table}/{key}"
         response = await self.put(url, data=value)
         return await response.read()
 
@@ -80,7 +80,7 @@ class TridentClient(BaseClient):
         return await response.json()
 
     async def table_delete(self, table: str, key: str):
-        url = f"/tables/{table}/{key}/"
+        url = f"/tables/{table}/{key}"
         await self.delete(url)
 
     async def table_foreign_insert(self, from_table: str, from_key: str, to_table: str, to_key: str) -> bytes:
@@ -94,7 +94,7 @@ class TridentClient(BaseClient):
         return await response.read()
 
     async def table_get(self, table: str, key: str, timeout: float = None) -> bytes | None:
-        url = f"/tables/{table}/{key}/"
+        url = f"/tables/{table}/{key}"
         response = await self.get(url, timeout=timeout)
         if response is None:
             return None
@@ -112,8 +112,8 @@ class TridentClient(BaseClient):
             yield line.decode()[:-1]
 
     async def table_exists(self, table: str, key: str) -> bool:
-        url = f"/tables/{table}/{key}/exists/"
-        response = await self.get(url)
+        url = f"/tables/{table}/{key}"
+        response = await self.head(url)
         if response is None:
             return False
         response = await response.json()

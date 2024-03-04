@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::{Query, Request};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, post, put};
+use axum::routing::{delete, head, post, put};
 use axum::{
     extract::{Path, State},
     routing::get,
@@ -159,10 +159,10 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/import/", post(tables_import))
                 .route("/tables/:table/", get(table_ls))
                 .route("/tables/:table/share/", get(table_share))
-                .route("/tables/:table/:key/", get(table_get))
-                .route("/tables/:table/:key/exists/", get(table_exists))
-                .route("/tables/:table/:key/", put(table_insert))
-                .route("/tables/:table/:key/", delete(table_delete))
+                .route("/tables/:table/*key", get(table_get))
+                .route("/tables/:table/*key", head(table_exists))
+                .route("/tables/:table/*key", put(table_insert))
+                .route("/tables/:table/*key", delete(table_delete))
                 .route("/tables/foreign_insert/", post(table_foreign_insert))
                 .layer(
                     TraceLayer::new_for_http()
