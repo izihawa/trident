@@ -2,10 +2,9 @@ use axum::body::Body;
 use axum::extract::{Query, Request};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, head, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{
     extract::{Path, State},
-    routing::get,
     Json, Router,
 };
 use clap::{Parser, Subcommand};
@@ -97,12 +96,6 @@ struct AppState {
     config: Arc<RwLock<Config>>,
     config_path: PathBuf,
 }
-
-#[derive(Serialize)]
-struct TableExistsResponse {
-    pub exists: bool,
-}
-
 #[derive(Serialize)]
 struct TablesExistsResponse {
     pub exists: bool,
@@ -160,7 +153,6 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/", get(table_ls))
                 .route("/tables/:table/share/", get(table_share))
                 .route("/tables/:table/*key", get(table_get))
-                .route("/tables/:table/*key", head(table_exists))
                 .route("/tables/:table/*key", put(table_insert))
                 .route("/tables/:table/*key", delete(table_delete))
                 .route("/tables/foreign_insert/", post(table_foreign_insert))
@@ -462,22 +454,6 @@ async fn table_delete(
         Ok(removed) => Response::builder()
             .body(Body::from(format!("{}", removed)))
             .unwrap(),
-        Err(e) => e.into_response(),
-    }
-}
-
-async fn table_exists(
-    State(state): State<AppState>,
-    Path((table, key)): Path<(String, String)>,
-) -> Response {
-    match state
-        .iroh_node
-        .read()
-        .await
-        .table_exists(&table, &key)
-        .await
-    {
-        Ok(exists) => Json(TableExistsResponse { exists }).into_response(),
         Err(e) => e.into_response(),
     }
 }

@@ -351,21 +351,6 @@ impl Storage {
         })
     }
 
-    pub async fn exists(&self, key: &str) -> Result<Option<PathBuf>> {
-        for file_shard_config in self.hash_ring.range(key, 1) {
-            let file_shard = &self.shards[&file_shard_config.name];
-            if file_shard
-                .exists(key)
-                .await
-                .map_err(Error::io_error)?
-                .is_some()
-            {
-                return Ok(Some(file_shard.get_path_for(key)));
-            }
-        }
-        Ok(None)
-    }
-
     pub fn iroh_doc(&self) -> &IrohDoc {
         &self.iroh_doc
     }

@@ -408,13 +408,6 @@ impl IrohNode {
         }
     }
 
-    pub async fn table_exists(&self, table_name: &str, key: &str) -> Result<bool> {
-        match self.table_storages.get(table_name) {
-            Some(table_storage) => Ok(table_storage.exists(key).await?.is_some()),
-            None => Err(Error::missing_table(table_name)),
-        }
-    }
-
     pub fn table_keys(&self, table_name: &str) -> Option<impl Stream<Item = Result<String>>> {
         self.table_storages.get(table_name).cloned().map_or_else(
             || None,

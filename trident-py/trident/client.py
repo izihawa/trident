@@ -114,7 +114,4 @@ class TridentClient(BaseClient):
     async def table_exists(self, table: str, key: str) -> bool:
         url = f"/tables/{table}/{key}"
         response = await self.head(url)
-        if response is None:
-            return False
-        response = await response.json()
-        return response["exists"]
+        return response is not None
