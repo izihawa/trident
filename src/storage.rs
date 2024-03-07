@@ -20,6 +20,7 @@ use iroh_base::hash::BlobFormat;
 use lru::LruCache;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
@@ -38,6 +39,7 @@ pub struct Storage {
     shards: HashMap<String, FileShard>,
     sinks: Vec<Arc<dyn Sink>>,
     table_config: TableConfig,
+    cancellation_token: CancellationToken,
 }
 
 impl Storage {
@@ -67,6 +69,7 @@ impl Storage {
             shards,
             sinks,
             table_config,
+            cancellation_token: cancellation_token.clone(),
         };
         let storage_clone = storage.clone();
         let mut stream = storage_clone
@@ -140,6 +143,7 @@ impl Storage {
         let storage_clone = storage.clone();
 
         if storage_config.is_import_missing_enabled {
+            let task_tracker0 = task_tracker.clone();
             task_tracker.spawn(async move {
                 let all_keys: Arc<HashSet<_>> = Arc::new(
                     storage_clone
@@ -159,7 +163,7 @@ impl Storage {
                     let all_keys = all_keys.clone();
                     let pool = pool.clone();
                     let cancellation_token = cancellation_token.clone();
-                    tokio::spawn(async move {
+                    task_tracker0.spawn(async move {
                         let base_path = shard.path().to_path_buf();
                         let mut read_dir_stream = tokio::fs::read_dir(&base_path)
                             .await
@@ -256,8 +260,22 @@ impl Storage {
             return Ok(());
         };
         let mut stream = self.iroh_doc.get_many(Query::all()).await.unwrap();
-        while let Some(entry) = stream.try_next().await.unwrap() {
-            self.download_entry_from_peers(&entry, &peers).await?;
+        loop {
+            tokio::select! {
+                _ = self.cancellation_token.cancelled() => {
+                    info!("cancel");
+                    break;
+                },
+                entry = stream.try_next() => {
+                    match entry.unwrap() {
+                        Some(entry) => {
+                            self.download_entry_from_peers(&entry, &peers).await?;
+                        }
+                        None => break,
+                    }
+
+                }
+            }
         }
         Ok(())
     }
@@ -355,7 +373,7 @@ impl Storage {
         &self.iroh_doc
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<Box<dyn AsyncRead + Unpin + Send>>> {
+    pub async fn get(&self, key: &str) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
         let first_shard_path = self
             .hash_ring
             .range(key, 1)
@@ -364,7 +382,10 @@ impl Storage {
             .ok_or_else(|| Error::storage("no shards"))?;
         let shard = &self.shards[&first_shard_path.name];
         match shard.open_store(key).await {
-            Ok(Some(file)) => return Ok(Some(Box::new(file))),
+            Ok(Some(file)) => {
+                let file_size = file.metadata().await.unwrap().size();
+                return Ok(Some((Box::new(file), file_size)));
+            }
             Err(e) => return Err(Error::io_error(e)),
             Ok(None) => {}
         }
@@ -379,11 +400,15 @@ impl Storage {
             if let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await {
                 self.download_entry_from_peers(&entry, &peers).await?;
             }
-            return Ok(Some(Box::new(
-                entry
-                    .content_reader(&self.sync_client)
-                    .await
-                    .map_err(Error::storage)?,
+            let file_size = entry.content_len();
+            return Ok(Some((
+                Box::new(
+                    entry
+                        .content_reader(&self.sync_client)
+                        .await
+                        .map_err(Error::storage)?,
+                ),
+                file_size,
             )));
         }
         Ok(None)

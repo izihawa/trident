@@ -1,6 +1,6 @@
 use axum::body::Body;
 use axum::extract::{Query, Request};
-use axum::http::StatusCode;
+use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{
@@ -426,12 +426,20 @@ async fn table_foreign_insert(
 
 async fn table_get(
     State(state): State<AppState>,
+    method: Method,
     Path((table, key)): Path<(String, String)>,
 ) -> Response {
     match state.iroh_node.read().await.table_get(&table, &key).await {
-        Ok(Some(reader)) => Response::builder()
-            .body(Body::from_stream(ReaderStream::new(reader)))
-            .unwrap(),
+        Ok(Some((reader, file_size))) => match method {
+            Method::HEAD => Response::builder()
+                .header("Content-Length", file_size)
+                .body(Body::default())
+                .unwrap(),
+            Method::GET => Response::builder()
+                .body(Body::from_stream(ReaderStream::new(reader)))
+                .unwrap(),
+            _ => unreachable!(),
+        },
         Ok(None) => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())

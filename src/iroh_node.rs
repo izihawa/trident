@@ -280,7 +280,8 @@ impl IrohNode {
                     .await
                     .map_err(Error::doc)?;
                 let storage0 = entry.get().clone();
-                tokio::spawn(async move { storage0.download_missing().await });
+                self.task_tracker
+                    .spawn(async move { storage0.download_missing().await });
                 Ok(entry.get().iroh_doc().id())
             }
             Entry::Vacant(entry) => {
@@ -394,7 +395,7 @@ impl IrohNode {
         &self,
         table_name: &str,
         key: &str,
-    ) -> Result<Option<Box<dyn AsyncRead + Unpin + Send>>> {
+    ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
         match self.table_storages.get(table_name) {
             Some(table_storage) => table_storage.get(key).await,
             None => Err(Error::missing_table(table_name)),
