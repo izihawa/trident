@@ -214,6 +214,7 @@ impl IrohNode {
         storage_name: &str,
         sinks: Vec<String>,
         keep_blob: bool,
+        try_retrieve_from_iroh: bool,
     ) -> Result<NamespaceId> {
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
@@ -229,6 +230,7 @@ impl IrohNode {
                     sinks,
                     storage_name: storage_name.to_string(),
                     keep_blob,
+                    try_retrieve_from_iroh,
                 };
                 let storage_engine = Storage::new(
                     table_name,
@@ -279,9 +281,6 @@ impl IrohNode {
                     .start_sync(ticket.nodes)
                     .await
                     .map_err(Error::doc)?;
-                let storage0 = entry.get().clone();
-                self.task_tracker
-                    .spawn(async move { storage0.download_missing().await });
                 Ok(entry.get().iroh_doc().id())
             }
             Entry::Vacant(entry) => {
@@ -305,6 +304,7 @@ impl IrohNode {
                     sinks,
                     storage_name: storage_name.to_string(),
                     keep_blob,
+                    try_retrieve_from_iroh: true,
                 };
                 let storage_engine = Storage::new(
                     table_name,
@@ -328,6 +328,20 @@ impl IrohNode {
                 Ok(iroh_doc.id())
             }
         }
+    }
+
+    pub async fn tables_sync(
+        &self,
+        table_name: &str,
+        download_policy: DownloadPolicy,
+    ) -> Result<()> {
+        let Some(storage) = self.table_storages.get(table_name) else {
+            return Err(Error::missing_table(table_name));
+        };
+        let storage0 = storage.clone();
+        self.task_tracker
+            .spawn(async move { storage0.download_missing(download_policy).await });
+        Ok(())
     }
 
     pub async fn tables_drop(&mut self, table_name: &str) -> Result<()> {

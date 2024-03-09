@@ -13,7 +13,7 @@ use iroh::client::{Entry, LiveEvent};
 use iroh::net::key::PublicKey;
 use iroh::net::NodeAddr;
 use iroh::rpc_protocol::{BlobDownloadRequest, DownloadLocation, SetTagOption, ShareMode};
-use iroh::sync::store::{Query, SortBy, SortDirection};
+use iroh::sync::store::{DownloadPolicy, Query, SortBy, SortDirection};
 use iroh::sync::{AuthorId, ContentStatus, PeerIdBytes};
 use iroh::ticket::DocTicket;
 use iroh_base::hash::BlobFormat;
@@ -142,7 +142,7 @@ impl Storage {
 
         let storage_clone = storage.clone();
 
-        if storage_config.is_import_missing_enabled {
+        if storage_config.import_threads > 0 {
             let task_tracker0 = task_tracker.clone();
             task_tracker.spawn(async move {
                 let all_keys: Arc<HashSet<_>> = Arc::new(
@@ -155,7 +155,7 @@ impl Storage {
                         .collect()
                         .await,
                 );
-                let pool = Arc::new(Pool::bounded(16));
+                let pool = Arc::new(Pool::bounded(storage_config.import_threads as usize));
 
                 for shard in storage_clone.shards.values() {
                     let storage_clone = storage_clone.clone();
@@ -255,11 +255,12 @@ impl Storage {
         Ok(())
     }
 
-    pub async fn download_missing(&self) -> Result<()> {
+    pub async fn download_missing(&self, download_policy: DownloadPolicy) -> Result<()> {
         let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await else {
             return Ok(());
         };
         let mut stream = self.iroh_doc.get_many(Query::all()).await.unwrap();
+        let storage0 = self.clone();
         loop {
             tokio::select! {
                 _ = self.cancellation_token.cancelled() => {
@@ -269,7 +270,18 @@ impl Storage {
                 entry = stream.try_next() => {
                     match entry.unwrap() {
                         Some(entry) => {
-                            self.download_entry_from_peers(&entry, &peers).await?;
+                            if match &download_policy {
+                                DownloadPolicy::NothingExcept(patterns) => {
+                                    patterns.iter().any(|pattern| pattern.matches(entry.key()))
+                                }
+                                DownloadPolicy::EverythingExcept(patterns) => {
+                                    patterns.iter().all(|pattern| !pattern.matches(entry.key()))
+                                }
+                            } {
+                                self.download_entry_from_peers(&entry, &peers).await?;
+                                let key = std::str::from_utf8(entry.key()).map_err(Error::incorrect_key)?;
+                                storage0.process_sinks(key).await?;
+                            }
                         }
                         None => break,
                     }
@@ -388,6 +400,9 @@ impl Storage {
             }
             Err(e) => return Err(Error::io_error(e)),
             Ok(None) => {}
+        }
+        if !self.table_config.try_retrieve_from_iroh {
+            return Ok(None);
         }
         let entry = self
             .iroh_doc

@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-fn return_false() -> bool {
-    false
+fn return_0() -> u32 {
+    0
 }
+
 fn return_true() -> bool {
     true
 }
@@ -14,8 +15,8 @@ fn return_true() -> bool {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StorageEngineConfig {
     pub shards: Vec<ShardConfig>,
-    #[serde(default = "return_false")]
-    pub is_import_missing_enabled: bool,
+    #[serde(default = "return_0")]
+    pub import_threads: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,6 +63,8 @@ pub struct TableConfig {
     pub storage_name: String,
     #[serde(default = "return_true")]
     pub keep_blob: bool,
+    #[serde(default = "return_true")]
+    pub try_retrieve_from_iroh: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -124,7 +127,7 @@ impl Config {
                                     weight: 1,
                                 })
                                 .collect(),
-                            is_import_missing_enabled: false,
+                            import_threads: 0,
                         },
                     )]
                     .into_iter(),

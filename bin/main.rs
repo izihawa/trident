@@ -65,6 +65,8 @@ struct TablesCreateRequest {
     sinks: Vec<String>,
     #[serde(default = "return_true")]
     keep_blob: bool,
+    #[serde(default = "return_true")]
+    try_retrieve_from_iroh: bool,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +79,12 @@ struct TablesImportRequest {
     sinks: Vec<String>,
     #[serde(default = "return_true")]
     keep_blob: bool,
+}
+
+#[derive(Deserialize)]
+struct TablesSyncRequest {
+    #[serde(default)]
+    download_policy: Option<DownloadPolicy>,
 }
 
 #[derive(Deserialize)]
@@ -150,6 +158,7 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/exists/", get(tables_exists))
                 .route("/tables/:table/", delete(tables_drop))
                 .route("/tables/:table/import/", post(tables_import))
+                .route("/tables/:table/sync/", post(tables_sync))
                 .route("/tables/:table/", get(table_ls))
                 .route("/tables/:table/share/", get(table_share))
                 .route("/tables/:table/*key", get(table_get))
@@ -277,6 +286,7 @@ async fn tables_create(
             &tables_create_request.storage,
             tables_create_request.sinks,
             tables_create_request.keep_blob,
+            tables_create_request.try_retrieve_from_iroh,
         )
         .await
     {
@@ -340,6 +350,28 @@ async fn tables_import(
                 Err(error) => error.into_response(),
             }
         }
+        Err(e) => e.into_response(),
+    }
+}
+
+async fn tables_sync(
+    State(state): State<AppState>,
+    Path(table): Path<String>,
+    Json(tables_sync_request): Json<TablesSyncRequest>,
+) -> Response {
+    match state
+        .iroh_node
+        .read()
+        .await
+        .tables_sync(
+            &table,
+            tables_sync_request
+                .download_policy
+                .unwrap_or_else(|| DownloadPolicy::EverythingExcept(vec![])),
+        )
+        .await
+    {
+        Ok(_) => Response::builder().body(Body::default()).unwrap(),
         Err(e) => e.into_response(),
     }
 }

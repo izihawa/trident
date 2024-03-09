@@ -789,9 +789,9 @@ checksum = "78a6932c88f1d2c29533a3b8a5f5a2f84cc19c3339b431677c3160c5c2e6ca85"
 
 [[package]]
 name = "bumpalo"
-version = "3.15.3"
+version = "3.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ea184aa71bb362a1157c896979544cc23974e08fd265f29ea96b59f0b4a555b"
+checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
 name = "byteorder"
@@ -1256,7 +1256,7 @@ dependencies = [
  "netlink-packet-route",
  "netlink-sys",
  "once_cell",
- "system-configuration",
+ "system-configuration 0.5.1",
  "windows 0.48.0",
 ]
 
@@ -2419,7 +2419,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2478,7 +2478,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "aead",
  "anyhow",
@@ -2519,7 +2519,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2558,7 +2558,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2599,7 +2599,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -2619,7 +2619,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "aead",
  "anyhow",
@@ -2689,7 +2689,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#a1a9257af7530dc8c545a0cd1f39c9093c83c010"
+source = "git+https://github.com/izihawa/iroh?branch=bao-file#3e2667d6d939fe63608ae8131c3dc9ee24e45adf"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3701,9 +3701,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f87c10af16e0af74010d2a123d202e8363c04db5acfa91d8747f64a8524da3a"
+checksum = "c1ca959da22a332509f2a73ae9e5f23f9dcfc31fd3a54d71f159495bd5909baa"
 dependencies = [
  "dtoa",
  "itoa",
@@ -3739,9 +3739,9 @@ dependencies = [
 
 [[package]]
 name = "quic-rpc"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1428fcf30c17a159ff10c1f3c69fca92fd7cfa11e9fef7d573f3c6f0da3b5920"
+checksum = "4574b485c0ac86e1a087ad616d99daecd3742820b74172e3cd98b34707130c52"
 dependencies = [
  "bincode",
  "educe",
@@ -4014,9 +4014,9 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "reqwest"
-version = "0.11.24"
+version = "0.11.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6920094eb85afde5e4a138be3f2de8bbdf28000f0029e72c45025a56b042251"
+checksum = "0eea5a9eb898d3783f17c6407670e3592fd174cb81a10e51d4c37f49450b9946"
 dependencies = [
  "base64 0.21.7",
  "bytes",
@@ -4042,7 +4042,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sync_wrapper",
- "system-configuration",
+ "system-configuration 0.6.0",
  "tokio",
  "tokio-rustls",
  "tower-service",
@@ -4445,9 +4445,9 @@ dependencies = [
 
 [[package]]
 name = "serde_path_to_error"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebd154a240de39fdebcf5775d2675c204d7c13cf39a4c697be6493c8e734337c"
+checksum = "af99884400da37c88f5e9146b7f1fd0fbcae8f6eec4e9da38b67d05486f814a6"
 dependencies = [
  "itoa",
  "serde",
@@ -4874,7 +4874,18 @@ checksum = "ba3a3adc5c275d719af8cb4272ea1c4a6d668a777f37e115f6d11ddbc1c8e0e7"
 dependencies = [
  "bitflags 1.3.2",
  "core-foundation",
- "system-configuration-sys",
+ "system-configuration-sys 0.5.0",
+]
+
+[[package]]
+name = "system-configuration"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "658bc6ee10a9b4fcf576e9b0819d95ec16f4d2c02d39fd83ac1c8789785c4a42"
+dependencies = [
+ "bitflags 2.4.2",
+ "core-foundation",
+ "system-configuration-sys 0.6.0",
 ]
 
 [[package]]
@@ -4882,6 +4893,16 @@ name = "system-configuration-sys"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a75fb188eb626b924683e3b95e3a48e63551fcfb51949de2f06a9d91dbee93c9"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "system-configuration-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -5268,7 +5289,7 @@ dependencies = [
 
 [[package]]
 name = "trident-storage"
-version = "0.0.16"
+version = "0.0.17"
 dependencies = [
  "anyhow",
  "async-stream",
