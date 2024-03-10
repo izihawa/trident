@@ -147,6 +147,7 @@ async fn app() -> Result<(), Error> {
 
             let state =
                 create_state(&config, cancellation_token.clone(), task_tracker.clone()).await?;
+            let iroh_node = state.iroh_node.clone();
             let config = state.config.clone();
 
             // build our application with a route
@@ -183,7 +184,10 @@ async fn app() -> Result<(), Error> {
                         .instrument(info_span!(parent: None, "shutdown_signal")),
                 )
                 .await
-                .unwrap()
+                .unwrap();
+
+            let iroh_node = Arc::try_unwrap(iroh_node).unwrap().into_inner();
+            iroh_node.shutdown().await.unwrap();
         }
         Commands::GenerateConfig { base_path, shards } => {
             println!(

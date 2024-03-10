@@ -5,6 +5,7 @@ use crate::storage::Storage;
 use crate::IrohClient;
 use async_stream::stream;
 use futures::StreamExt;
+use iroh::bytes::store::redb::Store;
 use iroh::bytes::Hash;
 use iroh::client::quic::RPC_ALPN;
 use iroh::node::{GcPolicy, Node};
@@ -16,6 +17,7 @@ use quic_rpc::transport::quinn::QuinnServerEndpoint;
 use quinn;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -36,6 +38,13 @@ pub struct IrohNode {
     sinks: HashMap<String, Arc<dyn Sink>>,
     cancellation_token: CancellationToken,
     task_tracker: TaskTracker,
+    node: Node<Store>,
+}
+
+impl Debug for IrohNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.sync_client.fmt(f)
+    }
 }
 
 impl IrohNode {
@@ -62,9 +71,7 @@ impl IrohNode {
         tokio::fs::create_dir_all(&blob_path)
             .await
             .map_err(Error::node_create)?;
-        let db = iroh::bytes::store::redb::Store::load(&blob_path)
-            .await
-            .map_err(Error::node_create)?;
+        let db = Store::load(&blob_path).await.map_err(Error::node_create)?;
 
         let peer_data_path =
             iroh::util::path::IrohPaths::PeerData.with_root(&config_lock.iroh.path);
@@ -172,6 +179,7 @@ impl IrohNode {
         drop(config_lock);
 
         let iroh_node = IrohNode {
+            node,
             sync_client,
             table_storages,
             author_id,
@@ -278,10 +286,7 @@ impl IrohNode {
                 if iroh_doc.id() != ticket.capability.id() {
                     return Err(Error::existing_table(table_name));
                 }
-                iroh_doc
-                    .start_sync(nodes)
-                    .await
-                    .map_err(Error::doc)?;
+                iroh_doc.start_sync(nodes).await.map_err(Error::doc)?;
                 Ok(entry.get().iroh_doc().id())
             }
             Entry::Vacant(entry) => {
@@ -295,10 +300,7 @@ impl IrohNode {
                     .set_download_policy(download_policy.clone())
                     .await
                     .map_err(Error::doc)?;
-                iroh_doc
-                    .start_sync(nodes)
-                    .await
-                    .map_err(Error::doc)?;
+                iroh_doc.start_sync(nodes).await.map_err(Error::doc)?;
                 let materialised_sinks = sinks
                     .iter()
                     .map(|sink_name| self.sinks[sink_name].clone())
@@ -439,5 +441,14 @@ impl IrohNode {
                 })
             },
         )
+    }
+
+    pub async fn shutdown(self) -> Result<()> {
+        self.sync_client
+            .node
+            .shutdown(false)
+            .await
+            .map_err(Error::node_create)?;
+        Ok(())
     }
 }
