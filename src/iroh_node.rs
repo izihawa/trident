@@ -271,6 +271,7 @@ impl IrohNode {
         keep_blob: bool,
     ) -> Result<NamespaceId> {
         let ticket = DocTicket::from_str(table_ticket).map_err(Error::doc)?;
+        let nodes = ticket.nodes.clone();
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(entry) => {
                 let iroh_doc = entry.get().iroh_doc();
@@ -278,7 +279,7 @@ impl IrohNode {
                     return Err(Error::existing_table(table_name));
                 }
                 iroh_doc
-                    .start_sync(ticket.nodes)
+                    .start_sync(nodes)
                     .await
                     .map_err(Error::doc)?;
                 Ok(entry.get().iroh_doc().id())
@@ -292,6 +293,10 @@ impl IrohNode {
                     .map_err(Error::table)?;
                 iroh_doc
                     .set_download_policy(download_policy.clone())
+                    .await
+                    .map_err(Error::doc)?;
+                iroh_doc
+                    .start_sync(nodes)
                     .await
                     .map_err(Error::doc)?;
                 let materialised_sinks = sinks

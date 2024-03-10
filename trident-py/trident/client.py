@@ -64,6 +64,20 @@ class TridentClient(BaseClient):
         )
         return await response.read()
 
+    async def tables_sync(
+        self,
+        table: str,
+        download_policy: dict | None = None,
+    ) -> bytes:
+        url = f"/tables/{table}/sync/"
+        response = await self.post(
+            url,
+            json={
+                'download_policy': download_policy,
+            },
+        )
+        return await response.read()
+
     async def tables_drop(self, table: str) -> bytes:
         url = f"/tables/{table}/"
         response = await self.delete(url)
