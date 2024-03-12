@@ -39,6 +39,8 @@ pub enum Error {
     Storage { description: String },
     #[error("key: {description}")]
     IncorrectKey { description: String },
+    #[error("network: {description}")]
+    Network { description: String },
 }
 
 impl Error {
@@ -133,6 +135,12 @@ impl Error {
 
     pub fn incorrect_key(error: impl Display) -> Self {
         Error::IncorrectKey {
+            description: error.to_string(),
+        }
+    }
+
+    pub fn network(error: impl Display) -> Self {
+        Error::Network {
             description: error.to_string(),
         }
     }

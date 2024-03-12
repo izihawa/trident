@@ -176,7 +176,7 @@ async fn app() -> Result<(), Error> {
             // run our app with hyper, listening globally on port 3000
             let listener = tokio::net::TcpListener::bind(&config.read().await.http.endpoint)
                 .await
-                .unwrap();
+                .map_err(Error::io_error)?;
 
             axum::serve(listener, app)
                 .with_graceful_shutdown(
@@ -184,10 +184,22 @@ async fn app() -> Result<(), Error> {
                         .instrument(info_span!(parent: None, "shutdown_signal")),
                 )
                 .await
-                .unwrap();
+                .map_err(Error::io_error)?;
+            iroh_node
+                .read()
+                .await
+                .send_shutdown()
+                .await
+                .map_err(Error::node_create)?;
 
-            let iroh_node = Arc::try_unwrap(iroh_node).unwrap().into_inner();
-            iroh_node.shutdown().await.unwrap();
+            match Arc::try_unwrap(iroh_node) {
+                Ok(iroh_node) => iroh_node
+                    .into_inner()
+                    .shutdown()
+                    .await
+                    .map_err(Error::node_create)?,
+                Err(_) => Err(Error::io_error("iroh_node cannot be destructed"))?,
+            };
         }
         Commands::GenerateConfig { base_path, shards } => {
             println!(

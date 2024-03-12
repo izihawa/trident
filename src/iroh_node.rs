@@ -5,7 +5,7 @@ use crate::storage::Storage;
 use crate::IrohClient;
 use async_stream::stream;
 use futures::StreamExt;
-use iroh::bytes::store::redb::Store;
+use iroh::bytes::store::file::Store;
 use iroh::bytes::Hash;
 use iroh::client::quic::RPC_ALPN;
 use iroh::node::{GcPolicy, Node};
@@ -443,12 +443,17 @@ impl IrohNode {
         )
     }
 
-    pub async fn shutdown(self) -> Result<()> {
+    pub async fn send_shutdown(&self) -> Result<()> {
         self.sync_client
             .node
             .shutdown(false)
             .await
             .map_err(Error::node_create)?;
+        Ok(())
+    }
+
+    pub async fn shutdown(self) -> Result<()> {
+        self.node.shutdown();
         Ok(())
     }
 }
