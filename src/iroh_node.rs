@@ -337,6 +337,16 @@ impl IrohNode {
         }
     }
 
+    pub async fn tables_integrity(&self, table_name: &str) -> Result<()> {
+        let Some(storage) = self.table_storages.get(table_name) else {
+            return Err(Error::missing_table(table_name));
+        };
+        let storage0 = storage.clone();
+        self.task_tracker
+            .spawn(async move { storage0.check_integrity().await });
+        Ok(())
+    }
+
     pub async fn tables_sync(
         &self,
         table_name: &str,

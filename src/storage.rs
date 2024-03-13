@@ -223,6 +223,46 @@ impl Storage {
         Ok(storage)
     }
 
+    pub async fn check_integrity(&self) {
+        let mut stream = self.iroh_doc.get_many(Query::all()).await.unwrap();
+        loop {
+            tokio::select! {
+                biased;
+                _ = self.cancellation_token.cancelled() => {
+                    info!("cancel");
+                    break;
+                },
+                entry = stream.try_next() => {
+                    match entry.unwrap() {
+                        Some(entry) => {
+                            let key = match std::str::from_utf8(entry.key()).map_err(Error::incorrect_key) {
+                                Ok(key) => key,
+                                Err(error) => {
+                                    error!(error = ?error);
+                                    break;
+                                }
+                            };
+                            if self.get_path(key).metadata().map(|x| x.len()).unwrap_or(0) == 0 {
+                                if let Err(error) = self.sync_client
+                                    .blobs
+                                    .delete_blob(entry.content_hash())
+                                    .await
+                                    .map_err(Error::entry) {
+                                    error!(error = ?error);
+                                }
+                                if let Err(error) = self.delete_from_fs(key).await {
+                                    error!(error = ?error);
+                                }
+                            }
+                        }
+                        None => break,
+                    }
+
+                }
+            }
+        }
+    }
+
     async fn download_entry_from_peers(&self, entry: &Entry, peers: &[PeerIdBytes]) -> Result<()> {
         let key = std::str::from_utf8(entry.key()).map_err(Error::incorrect_key)?;
         for peer in peers {
@@ -248,11 +288,14 @@ impl Storage {
                 })
                 .await
                 .map_err(Error::io_error)?;
-            if progress.finish().await.map_err(Error::storage).is_ok() {
-                break;
+            match progress.finish().await.map_err(Error::storage) {
+                Ok(import_result) => if import_result.local_size + import_result.downloaded_size == entry.content_len() {
+                    return Ok(())
+                }
+                Err(_) => continue,
             }
         }
-        Ok(())
+        Err(Error::missing_key(key))
     }
 
     pub async fn download_missing(&self, download_policy: DownloadPolicy) -> Result<()> {
@@ -260,9 +303,9 @@ impl Storage {
             return Ok(());
         };
         let mut stream = self.iroh_doc.get_many(Query::all()).await.unwrap();
-        let storage0 = self.clone();
         loop {
             tokio::select! {
+                biased;
                 _ = self.cancellation_token.cancelled() => {
                     info!("cancel");
                     break;
@@ -279,8 +322,6 @@ impl Storage {
                                 }
                             } {
                                 self.download_entry_from_peers(&entry, &peers).await?;
-                                let key = std::str::from_utf8(entry.key()).map_err(Error::incorrect_key)?;
-                                storage0.process_sinks(key).await?;
                             }
                         }
                         None => break,
@@ -313,18 +354,22 @@ impl Storage {
     }
 
     async fn process_remote_entry(&self, key: &str, entry: &Entry) -> Result<Option<PathBuf>> {
+        info!(action = "process_remote_entry", key = ?key);
         if entry.content_len() == 0 {
             self.delete_from_fs(key).await?;
             Ok(None)
         } else {
             let shard_path = self.get_path(key);
-            self.iroh_doc()
-                .export_file(entry.clone(), shard_path.clone(), ExportMode::TryReference)
-                .await
-                .map_err(Error::storage)?
-                .finish()
-                .await
-                .map_err(Error::storage)?;
+            if !shard_path.exists() {
+                info!(action = "export_file", key = ?key);
+                self.iroh_doc()
+                    .export_file(entry.clone(), shard_path.clone(), ExportMode::TryReference)
+                    .await
+                    .map_err(Error::storage)?
+                    .finish()
+                    .await
+                    .map_err(Error::storage)?;
+            }
             Ok(Some(shard_path))
         }
     }
