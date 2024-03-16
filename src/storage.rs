@@ -40,6 +40,7 @@ pub struct Storage {
     sinks: Vec<Arc<dyn Sink>>,
     table_config: TableConfig,
     cancellation_token: CancellationToken,
+    task_tracker: TaskTracker,
 }
 
 impl Storage {
@@ -70,6 +71,7 @@ impl Storage {
             sinks,
             table_config,
             cancellation_token: cancellation_token.clone(),
+            task_tracker: task_tracker.clone(),
         };
         let storage_clone = storage.clone();
         let mut stream = storage_clone
@@ -163,6 +165,7 @@ impl Storage {
                     let all_keys = all_keys.clone();
                     let pool = pool.clone();
                     let cancellation_token = cancellation_token.clone();
+                    let task_tracker1 = task_tracker0.clone();
                     task_tracker0.spawn(async move {
                         let base_path = shard.path().to_path_buf();
                         let mut read_dir_stream = tokio::fs::read_dir(&base_path)
@@ -182,7 +185,7 @@ impl Storage {
                                         if all_keys.contains(&key) || key.starts_with(&[b'~']) {
                                             continue;
                                         }
-                                        pool.spawn({
+                                        let join_handle = pool.spawn({
                                             let iroh_doc = storage_clone.iroh_doc().clone();
                                             async move {
                                                 let import_progress = match iroh_doc
@@ -209,6 +212,7 @@ impl Storage {
                                         })
                                         .await
                                         .map_err(Error::io_error)?;
+                                        let _ = task_tracker1.track_future(join_handle);
                                     } else {
                                         return Ok::<(), Error>(())
                                     }
@@ -288,46 +292,65 @@ impl Storage {
                 })
                 .await
                 .map_err(Error::io_error)?;
-            match progress.finish().await.map_err(Error::storage) {
-                Ok(import_result) => if import_result.local_size + import_result.downloaded_size == entry.content_len() {
-                    return Ok(())
+            match progress.finish().await {
+                Ok(import_result) => {
+                    if import_result.local_size + import_result.downloaded_size
+                        == entry.content_len()
+                    {
+                        return Ok(());
+                    }
                 }
-                Err(_) => continue,
+                Err(error) => warn!(error = ?error),
             }
         }
-        Err(Error::missing_key(key))
+        Err(Error::failed_download(key))
     }
 
-    pub async fn download_missing(&self, download_policy: DownloadPolicy) -> Result<()> {
+    pub async fn download_missing(
+        &self,
+        download_policy: Option<DownloadPolicy>,
+        threads: u32,
+    ) -> Result<()> {
         let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await else {
             return Ok(());
         };
-        let mut stream = self.iroh_doc.get_many(Query::all()).await.unwrap();
-        loop {
-            tokio::select! {
-                biased;
-                _ = self.cancellation_token.cancelled() => {
-                    info!("cancel");
-                    break;
-                },
-                entry = stream.try_next() => {
-                    match entry.unwrap() {
-                        Some(entry) => {
-                            if match &download_policy {
-                                DownloadPolicy::NothingExcept(patterns) => {
-                                    patterns.iter().any(|pattern| pattern.matches(entry.key()))
-                                }
-                                DownloadPolicy::EverythingExcept(patterns) => {
-                                    patterns.iter().all(|pattern| !pattern.matches(entry.key()))
-                                }
-                            } {
-                                self.download_entry_from_peers(&entry, &peers).await?;
-                            }
-                        }
-                        None => break,
-                    }
+        let download_policy = download_policy.unwrap_or_else(|| self.table_config.download_policy);
+        let all_entries: Vec<_> = self
+            .iroh_doc
+            .get_many(Query::all())
+            .await
+            .map_err(Error::doc)?
+            .map(|x| x.unwrap())
+            .collect()
+            .await;
+        let pool = Arc::new(Pool::bounded(threads as usize));
 
+        for entry in all_entries {
+            if self.cancellation_token.is_cancelled() {
+                info!("cancel");
+                break;
+            }
+            if match &download_policy {
+                DownloadPolicy::NothingExcept(patterns) => {
+                    patterns.iter().any(|pattern| pattern.matches(entry.key()))
                 }
+                DownloadPolicy::EverythingExcept(patterns) => {
+                    patterns.iter().all(|pattern| !pattern.matches(entry.key()))
+                }
+            } {
+                let storage0 = self.clone();
+                let peers0 = peers.clone();
+                let join_handle = pool
+                    .spawn(async move {
+                        if let Err(error) =
+                            storage0.download_entry_from_peers(&entry, &peers0).await
+                        {
+                            warn!(error = ?error);
+                        }
+                    })
+                    .await
+                    .map_err(Error::io_error)?;
+                let _ = self.task_tracker.track_future(join_handle);
             }
         }
         Ok(())
@@ -489,7 +512,9 @@ impl Storage {
     pub async fn get_hash(&self, key: &str) -> Result<Option<(Hash, u64)>> {
         Ok(self
             .iroh_doc()
-            .get_one(Query::key_exact(key_to_bytes(key)))
+            .get_one(
+                Query::key_exact(key_to_bytes(key)).sort_by(SortBy::KeyAuthor, SortDirection::Asc),
+            )
             .await
             .map_err(Error::missing_key)?
             .map(|entry| (entry.content_hash(), entry.content_len())))
@@ -502,3 +527,19 @@ impl Storage {
             .map_err(Error::storage)
     }
 }
+
+/*
+q_struct = StructType([
+    StructField("q", StringType(), True)
+])
+
+def explode_to_q(jline):
+    rows = []
+    jreq = jline.get("request")
+    if not jreq:
+        return rows
+
+    return [{"q": jreq.get("q")}]
+
+udf_decompress_lz4_kostil_q = F.udf(lambda z: from_lz4(z, explode_to_q), ArrayType(q_struct))
+ */

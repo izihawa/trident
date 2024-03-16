@@ -41,6 +41,8 @@ pub enum Error {
     IncorrectKey { description: String },
     #[error("network: {description}")]
     Network { description: String },
+    #[error("failed_download: {description}")]
+    FailedDownload { description: String },
 }
 
 impl Error {
@@ -141,6 +143,12 @@ impl Error {
 
     pub fn network(error: impl Display) -> Self {
         Error::Network {
+            description: error.to_string(),
+        }
+    }
+
+    pub fn failed_download(error: impl Display) -> Self {
+        Error::FailedDownload {
             description: error.to_string(),
         }
     }

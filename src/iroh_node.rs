@@ -350,14 +350,15 @@ impl IrohNode {
     pub async fn tables_sync(
         &self,
         table_name: &str,
-        download_policy: DownloadPolicy,
+        download_policy: Option<DownloadPolicy>,
+        threads: u32,
     ) -> Result<()> {
         let Some(storage) = self.table_storages.get(table_name) else {
             return Err(Error::missing_table(table_name));
         };
         let storage0 = storage.clone();
         self.task_tracker
-            .spawn(async move { storage0.download_missing(download_policy).await });
+            .spawn(async move { storage0.download_missing(download_policy, threads).await });
         Ok(())
     }
 

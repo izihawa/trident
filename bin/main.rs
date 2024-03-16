@@ -85,6 +85,7 @@ struct TablesImportRequest {
 struct TablesSyncRequest {
     #[serde(default)]
     download_policy: Option<DownloadPolicy>,
+    threads: u32,
 }
 
 #[derive(Deserialize)]
@@ -390,8 +391,8 @@ async fn tables_sync(
         .tables_sync(
             &table,
             tables_sync_request
-                .download_policy
-                .unwrap_or_else(|| DownloadPolicy::EverythingExcept(vec![])),
+                .download_policy,
+            tables_sync_request.threads,
         )
         .await
     {
