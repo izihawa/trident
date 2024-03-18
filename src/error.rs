@@ -43,6 +43,8 @@ pub enum Error {
     Network { description: String },
     #[error("failed_download: {description}")]
     FailedDownload { description: String },
+    #[error("failed_shutdown: {description}")]
+    FailedShutdown { description: String },
 }
 
 impl Error {
@@ -149,6 +151,12 @@ impl Error {
 
     pub fn failed_download(error: impl Display) -> Self {
         Error::FailedDownload {
+            description: error.to_string(),
+        }
+    }
+
+    pub fn failed_shutdown(error: impl Display) -> Self {
+        Error::FailedShutdown {
             description: error.to_string(),
         }
     }

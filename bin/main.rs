@@ -187,19 +187,20 @@ async fn app() -> Result<(), Error> {
                 )
                 .await
                 .map_err(Error::io_error)?;
+
             iroh_node
                 .read()
                 .await
                 .send_shutdown()
                 .await
-                .map_err(Error::node_create)?;
+                .map_err(Error::failed_shutdown)?;
 
             match Arc::try_unwrap(iroh_node) {
                 Ok(iroh_node) => iroh_node
                     .into_inner()
                     .shutdown()
                     .await
-                    .map_err(Error::node_create)?,
+                    .map_err(Error::failed_shutdown)?,
                 Err(_) => Err(Error::io_error("iroh_node cannot be destructed"))?,
             };
         }
@@ -390,8 +391,7 @@ async fn tables_sync(
         .await
         .tables_sync(
             &table,
-            tables_sync_request
-                .download_policy,
+            tables_sync_request.download_policy,
             tables_sync_request.threads,
         )
         .await

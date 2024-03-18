@@ -145,6 +145,7 @@ impl Storage {
         let storage_clone = storage.clone();
 
         if storage_config.import_threads > 0 {
+            let import_threads_task_tracker = TaskTracker::new();
             let task_tracker0 = task_tracker.clone();
             task_tracker.spawn(async move {
                 let all_keys: Arc<HashSet<_>> = Arc::new(
@@ -162,10 +163,11 @@ impl Storage {
                 for shard in storage_clone.shards.values() {
                     let storage_clone = storage_clone.clone();
                     let shard = shard.clone();
+                    let shard_path = shard.path().to_path_buf();
                     let all_keys = all_keys.clone();
                     let pool = pool.clone();
                     let cancellation_token = cancellation_token.clone();
-                    let task_tracker1 = task_tracker0.clone();
+                    let import_threads_task_tracker0 = import_threads_task_tracker.clone();
                     task_tracker0.spawn(async move {
                         let base_path = shard.path().to_path_buf();
                         let mut read_dir_stream = tokio::fs::read_dir(&base_path)
@@ -174,8 +176,11 @@ impl Storage {
 
                         loop {
                             tokio::select! {
+                                biased;
                                 _ = cancellation_token.cancelled() => {
                                     info!("cancel");
+                                    import_threads_task_tracker0.close();
+                                    import_threads_task_tracker0.wait().await;
                                     return Ok::<(), Error>(())
                                 },
                                 entry = read_dir_stream.next_entry() => {
@@ -185,9 +190,15 @@ impl Storage {
                                         if all_keys.contains(&key) || key.starts_with(&[b'~']) {
                                             continue;
                                         }
-                                        let join_handle = pool.spawn({
-                                            let iroh_doc = storage_clone.iroh_doc().clone();
-                                            async move {
+                                        let import_threads_task_tracker0 = import_threads_task_tracker0.clone();
+                                        let storage_clone = storage_clone.clone();
+                                        let base_path = base_path.clone();
+                                        pool.spawn(async move {
+                                            if import_threads_task_tracker0.is_closed() {
+                                                return
+                                            }
+                                            let join_handle = import_threads_task_tracker0.spawn(async move {
+                                                let iroh_doc = storage_clone.iroh_doc().clone();
                                                 let import_progress = match iroh_doc
                                                     .import_file(
                                                         storage_clone.author_id,
@@ -204,22 +215,31 @@ impl Storage {
                                                     }
                                                 };
                                                 if let Err(error) = import_progress.finish().await.map_err(Error::storage) {
-                                                    error!(error = ?error, path = ?entry.path(), key = ?entry.file_name(), "import_progress_error");
+                                                    error!(
+                                                        error = ?error,
+                                                        path = ?entry.path(),
+                                                        key = ?entry.file_name(),
+                                                        "import_progress_error"
+                                                    );
                                                 }
                                                 info!(action = "imported", key = ?entry.file_name())
+                                            }.instrument(info_span!(parent: None, "import_missing", shard = ?base_path)));
+                                            if let Err(error) = join_handle.await {
+                                                error!(
+                                                    error = ?error,
+                                                    "join_import_threads"
+                                                );
                                             }
-                                                .instrument(info_span!(parent: None, "restore"))
                                         })
                                         .await
                                         .map_err(Error::io_error)?;
-                                        let _ = task_tracker1.track_future(join_handle);
                                     } else {
                                         return Ok::<(), Error>(())
                                     }
                                 }
                             }
                         }
-                    });
+                    }.instrument(info_span!(parent: None, "import_missing", shard = ?shard_path)));
                 }
                 Ok::<(), Error>(())
             });
@@ -314,7 +334,8 @@ impl Storage {
         let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await else {
             return Ok(());
         };
-        let download_policy = download_policy.unwrap_or_else(|| self.table_config.download_policy);
+        let download_policy =
+            download_policy.unwrap_or_else(|| self.table_config.download_policy.clone());
         let all_entries: Vec<_> = self
             .iroh_doc
             .get_many(Query::all())
