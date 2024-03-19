@@ -2,7 +2,6 @@ use crate::config::{Config, SinkConfig, StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
 use crate::sinks::{IpfsSink, S3Sink, Sink};
 use crate::storage::Storage;
-use crate::IrohClient;
 use async_stream::stream;
 use futures::StreamExt;
 use iroh::bytes::store::file::Store;
@@ -26,7 +25,6 @@ use tokio_util::task::TaskTracker;
 use tracing::info;
 
 pub struct IrohNode {
-    sync_client: IrohClient,
     table_storages: HashMap<String, Storage>,
     author_id: AuthorId,
     config: Arc<RwLock<Config>>,
@@ -39,7 +37,7 @@ pub struct IrohNode {
 
 impl Debug for IrohNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.sync_client.fmt(f)
+        self.node.fmt(f)
     }
 }
 
@@ -54,7 +52,8 @@ impl IrohNode {
             .await
             .map_err(Error::node_create)?;
 
-        let mut node_builder = Node::persistent(&config_lock.iroh.path).await
+        let mut node_builder = Node::persistent(&config_lock.iroh.path)
+            .await
             .map_err(Error::node_create)?
             .bind_port(config_lock.iroh.bind_port);
 
@@ -63,9 +62,9 @@ impl IrohNode {
                 node_builder.gc_policy(GcPolicy::Interval(Duration::from_secs(gc_interval_secs)))
         }
         let node = node_builder.spawn().await.map_err(Error::node_create)?;
-        let sync_client = node.client();
 
-        for doc in sync_client
+        for doc in node
+            .client()
             .docs
             .list()
             .await
@@ -80,7 +79,12 @@ impl IrohNode {
         let author_id = match &config_lock.iroh.author {
             Some(author) => AuthorId::from_str(author).map_err(Error::author)?,
             None => {
-                let author_id = sync_client.authors.create().await.map_err(Error::author)?;
+                let author_id = node
+                    .client()
+                    .authors
+                    .create()
+                    .await
+                    .map_err(Error::author)?;
                 config_lock.iroh.author = Some(author_id.to_string());
                 author_id
             }
@@ -102,7 +106,8 @@ impl IrohNode {
         let mut table_storages = HashMap::new();
         let storage_configs = config_lock.iroh.storages.clone();
         for (table_name, table_config) in &mut config_lock.iroh.tables {
-            let iroh_doc = sync_client
+            let iroh_doc = node
+                .client()
                 .docs
                 .open(NamespaceId::from_str(&table_config.id).map_err(Error::storage)?)
                 .await
@@ -122,8 +127,8 @@ impl IrohNode {
             let storage_engine = Storage::new(
                 table_name,
                 author_id,
+                node.clone(),
                 iroh_doc.clone(),
-                sync_client.clone(),
                 storage_configs[&table_config.storage_name].clone(),
                 materialised_sinks,
                 table_config.clone(),
@@ -140,7 +145,6 @@ impl IrohNode {
 
         let iroh_node = IrohNode {
             node,
-            sync_client,
             table_storages,
             author_id,
             config,
@@ -187,7 +191,13 @@ impl IrohNode {
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
             Entry::Vacant(entry) => {
-                let iroh_doc = self.sync_client.docs.create().await.map_err(Error::table)?;
+                let iroh_doc = self
+                    .node
+                    .client()
+                    .docs
+                    .create()
+                    .await
+                    .map_err(Error::table)?;
                 let materialised_sinks = sinks
                     .iter()
                     .map(|sink_name| self.sinks[sink_name].clone())
@@ -203,8 +213,8 @@ impl IrohNode {
                 let storage_engine = Storage::new(
                     table_name,
                     self.author_id,
+                    self.node.clone(),
                     iroh_doc.clone(),
-                    self.sync_client.clone(),
                     self.fs_storage_configs[storage_name].clone(),
                     materialised_sinks,
                     table_config.clone(),
@@ -251,7 +261,8 @@ impl IrohNode {
             }
             Entry::Vacant(entry) => {
                 let iroh_doc = self
-                    .sync_client
+                    .node
+                    .client()
                     .docs
                     .import(ticket)
                     .await
@@ -276,8 +287,8 @@ impl IrohNode {
                 let storage_engine = Storage::new(
                     table_name,
                     self.author_id,
+                    self.node.clone(),
                     iroh_doc.clone(),
-                    self.sync_client.clone(),
                     self.fs_storage_configs[storage_name].clone(),
                     materialised_sinks,
                     table_config.clone(),
@@ -326,7 +337,8 @@ impl IrohNode {
         match self.table_storages.remove(table_name) {
             None => Err(Error::missing_table(table_name)),
             Some(table_storage) => {
-                self.sync_client
+                self.node
+                    .client()
                     .docs
                     .drop_doc(table_storage.iroh_doc().id())
                     .await
@@ -415,7 +427,8 @@ impl IrohNode {
     }
 
     pub async fn send_shutdown(&self) -> Result<()> {
-        self.sync_client
+        self.node
+            .client()
             .node
             .shutdown(false)
             .await

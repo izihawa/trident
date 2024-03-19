@@ -4,7 +4,7 @@ use crate::file_shard::FileShard;
 use crate::hash_ring::HashRing;
 use crate::sinks::Sink;
 use crate::utils::key_to_bytes;
-use crate::{IrohClient, IrohDoc};
+use crate::IrohDoc;
 use async_stream::stream;
 use futures::{Stream, StreamExt, TryStreamExt};
 use iroh::bytes::store::ExportMode;
@@ -23,6 +23,8 @@ use std::num::NonZeroUsize;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use iroh::bytes::store::file::Store;
+use iroh::node::Node;
 use tokio::io::AsyncRead;
 use tokio_task_pool::Pool;
 use tokio_util::bytes;
@@ -34,21 +36,21 @@ use tracing::{error, info, info_span, warn, Instrument};
 pub struct Storage {
     author_id: AuthorId,
     iroh_doc: IrohDoc,
-    sync_client: IrohClient,
     hash_ring: HashRing,
     shards: HashMap<String, FileShard>,
     sinks: Vec<Arc<dyn Sink>>,
     table_config: TableConfig,
     cancellation_token: CancellationToken,
     task_tracker: TaskTracker,
+    node: Node<Store>,
 }
 
 impl Storage {
     pub async fn new(
         table_name: &str,
         author_id: AuthorId,
+        node: Node<Store>,
         iroh_doc: IrohDoc,
-        sync_client: IrohClient,
         storage_config: StorageEngineConfig,
         sinks: Vec<Arc<dyn Sink>>,
         table_config: TableConfig,
@@ -64,8 +66,8 @@ impl Storage {
         }
         let storage = Storage {
             author_id,
+            node,
             iroh_doc: iroh_doc.clone(),
-            sync_client,
             hash_ring: HashRing::with_hasher(storage_config.shards.iter()),
             shards,
             sinks,
@@ -267,7 +269,7 @@ impl Storage {
                                 }
                             };
                             if self.get_path(key).metadata().map(|x| x.len()).unwrap_or(0) == 0 {
-                                if let Err(error) = self.sync_client
+                                if let Err(error) = self.node
                                     .blobs
                                     .delete_blob(entry.content_hash())
                                     .await
@@ -298,7 +300,7 @@ impl Storage {
                 }
             };
             let progress = self
-                .sync_client
+                .node
                 .blobs
                 .download(BlobDownloadRequest {
                     hash: entry.content_hash(),
@@ -420,7 +422,7 @@ impl Storage {
 
     async fn retain_blob_if_needed(&self, key: &str, hash: Hash) -> Result<()> {
         if !self.table_config.keep_blob {
-            if let Err(error) = self.sync_client.blobs.delete_blob(hash).await {
+            if let Err(error) = self.node.blobs.delete_blob(hash).await {
                 warn!(error = ?error);
             }
             self.delete_from_fs(key).await?;
@@ -508,7 +510,7 @@ impl Storage {
             return Ok(Some((
                 Box::new(
                     entry
-                        .content_reader(&self.sync_client)
+                        .content_reader(self.node.client())
                         .await
                         .map_err(Error::storage)?,
                 ),
