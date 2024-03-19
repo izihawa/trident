@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
 RUN rustup target add \
     x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu armv7-unknown-linux-gnueabihf
 RUN rustup toolchain install \
-    1.75-x86_64-unknown-linux-gnu 1.75-aarch64-unknown-linux-gnu 1.75-armv7-unknown-linux-gnueabihf
+    1.76-x86_64-unknown-linux-gnu 1.76-aarch64-unknown-linux-gnu 1.76-armv7-unknown-linux-gnueabihf
 RUN rustup component add rustfmt
 ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc \
     CC_x86_64_unknown_linux_gnu=x86_64-linux-gnu-gcc \
