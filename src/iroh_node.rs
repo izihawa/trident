@@ -7,18 +7,14 @@ use async_stream::stream;
 use futures::StreamExt;
 use iroh::bytes::store::file::Store;
 use iroh::bytes::Hash;
-use iroh::client::quic::RPC_ALPN;
 use iroh::node::{GcPolicy, Node};
-use iroh::rpc_protocol::{ProviderRequest, ProviderResponse, ShareMode};
+use iroh::rpc_protocol::ShareMode;
 use iroh::sync::store::DownloadPolicy;
 use iroh::sync::{AuthorId, NamespaceId};
 use iroh::ticket::DocTicket;
-use quic_rpc::transport::quinn::QuinnServerEndpoint;
-use quinn;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -58,45 +54,9 @@ impl IrohNode {
             .await
             .map_err(Error::node_create)?;
 
-        let secret_key_path =
-            iroh::util::path::IrohPaths::SecretKey.with_root(&config_lock.iroh.path);
-        let secret_key = iroh::util::fs::load_secret_key(secret_key_path)
-            .await
-            .map_err(Error::node_create)?;
-
-        let docs_path = iroh::util::path::IrohPaths::DocsDatabase.with_root(&config_lock.iroh.path);
-        let docs = iroh::sync::store::fs::Store::new(&docs_path).map_err(Error::node_create)?;
-
-        let blob_path = iroh::util::path::IrohPaths::BaoStoreDir.with_root(&config_lock.iroh.path);
-        tokio::fs::create_dir_all(&blob_path)
-            .await
-            .map_err(Error::node_create)?;
-        let db = Store::load(&blob_path).await.map_err(Error::node_create)?;
-
-        let peer_data_path =
-            iroh::util::path::IrohPaths::PeerData.with_root(&config_lock.iroh.path);
-
-        let rpc_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config_lock.iroh.rpc_port);
-        let server_config = iroh::node::make_server_config(
-            &secret_key,
-            config_lock.iroh.max_rpc_streams,
-            config_lock.iroh.max_rpc_connections,
-            vec![RPC_ALPN.to_vec()],
-        )
-        .map_err(Error::node_create)?;
-
-        let rpc_quinn_endpoint = quinn::Endpoint::server(server_config.clone(), rpc_addr.into())
-            .map_err(Error::node_create)?;
-
-        let rpc_endpoint =
-            QuinnServerEndpoint::<ProviderRequest, ProviderResponse>::new(rpc_quinn_endpoint)
-                .map_err(Error::node_create)?;
-
-        let mut node_builder = Node::builder(db, docs)
-            .secret_key(secret_key)
-            .peers_data_path(peer_data_path)
-            .bind_port(config_lock.iroh.bind_port)
-            .rpc_endpoint(rpc_endpoint);
+        let mut node_builder = Node::persistent(&config_lock.iroh.path).await
+            .map_err(Error::node_create)?
+            .bind_port(config_lock.iroh.bind_port);
 
         if let Some(gc_interval_secs) = config_lock.iroh.gc_interval_secs {
             node_builder =

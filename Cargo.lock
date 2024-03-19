@@ -775,9 +775,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.4.2"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
+checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
 
 [[package]]
 name = "block-buffer"
@@ -1831,9 +1831,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
+checksum = "e57fa0ae458eb99874f54c09f4f9174f8b45fb87e854536a4e608696247f0c23"
 dependencies = [
  "ahash",
  "allocator-api2",
@@ -2223,7 +2223,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2265,7 +2265,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "aead",
  "anyhow",
@@ -2306,7 +2306,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2345,7 +2345,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2386,7 +2386,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -2406,7 +2406,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "aead",
  "anyhow",
@@ -2476,7 +2476,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.12.0"
-source = "git+https://github.com/izihawa/iroh?branch=bao-file#57e985a0e40bb6ff9fa656f1dd1eeaad6a57d9ba"
+source = "git+https://github.com/n0-computer/iroh?branch=main#0b9499271db043b94c6d32d77026970570b4b4d8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3626,7 +3626,7 @@ version = "11.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d86a7c4638d42c44551f4791a20e687dbb4c3de1f33c43dd71e355cd429def1"
 dependencies = [
- "bitflags 2.4.2",
+ "bitflags 2.5.0",
 ]
 
 [[package]]
@@ -3919,7 +3919,7 @@ version = "0.38.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea3e1a662af26cd7a3ba09c0297a31af215563ecf42817c98df621387f4e949"
 dependencies = [
- "bitflags 2.4.2",
+ "bitflags 2.5.0",
  "errno",
  "libc",
  "linux-raw-sys",
@@ -4792,7 +4792,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
 dependencies = [
- "bitflags 2.4.2",
+ "bitflags 2.5.0",
  "bytes",
  "http 1.1.0",
  "http-body 1.0.0",
@@ -4889,7 +4889,7 @@ dependencies = [
 
 [[package]]
 name = "trident-storage"
-version = "0.0.17"
+version = "0.0.18"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5048,9 +5048,9 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uuid"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
+checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "valuable"

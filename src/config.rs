@@ -87,9 +87,6 @@ pub struct IrohConfig {
     pub tables: HashMap<String, TableConfig>,
     pub path: PathBuf,
     pub bind_port: u16,
-    pub rpc_port: u16,
-    pub max_rpc_connections: u32,
-    pub max_rpc_streams: u64,
     #[serde(default = "HashMap::new")]
     pub sinks: HashMap<String, SinkConfig>,
     #[serde(default = "HashMap::new")]
@@ -112,9 +109,6 @@ impl Config {
                 tables: Default::default(),
                 path: base_path.join("iroh").to_path_buf(),
                 bind_port: 11204,
-                rpc_port: 4919,
-                max_rpc_connections: 32,
-                max_rpc_streams: 1024,
                 sinks: Default::default(),
                 storages: HashMap::from_iter(
                     vec![(
