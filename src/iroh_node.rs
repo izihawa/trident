@@ -4,7 +4,7 @@ use crate::sinks::{IpfsSink, S3Sink, Sink};
 use crate::storage::Storage;
 use async_stream::stream;
 use futures::StreamExt;
-use iroh::bytes::store::file::Store;
+use iroh::bytes::store::fs::Store;
 use iroh::bytes::Hash;
 use iroh::node::{GcPolicy, Node};
 use iroh::rpc_protocol::ShareMode;
@@ -186,7 +186,6 @@ impl IrohNode {
         storage_name: &str,
         sinks: Vec<String>,
         keep_blob: bool,
-        try_retrieve_from_iroh: bool,
     ) -> Result<NamespaceId> {
         match self.table_storages.entry(table_name.to_string()) {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
@@ -208,7 +207,6 @@ impl IrohNode {
                     sinks,
                     storage_name: storage_name.to_string(),
                     keep_blob,
-                    try_retrieve_from_iroh,
                 };
                 let storage_engine = Storage::new(
                     table_name,
@@ -282,7 +280,6 @@ impl IrohNode {
                     sinks,
                     storage_name: storage_name.to_string(),
                     keep_blob,
-                    try_retrieve_from_iroh: true,
                 };
                 let storage_engine = Storage::new(
                     table_name,
@@ -323,13 +320,17 @@ impl IrohNode {
         table_name: &str,
         download_policy: Option<DownloadPolicy>,
         threads: u32,
+        should_send_to_sink: bool,
     ) -> Result<()> {
         let Some(storage) = self.table_storages.get(table_name) else {
             return Err(Error::missing_table(table_name));
         };
         let storage0 = storage.clone();
-        self.task_tracker
-            .spawn(async move { storage0.download_missing(download_policy, threads).await });
+        self.task_tracker.spawn(async move {
+            storage0
+                .download_missing(download_policy, threads, should_send_to_sink)
+                .await
+        });
         Ok(())
     }
 

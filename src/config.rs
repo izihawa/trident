@@ -63,8 +63,6 @@ pub struct TableConfig {
     pub storage_name: String,
     #[serde(default = "return_true")]
     pub keep_blob: bool,
-    #[serde(default = "return_true")]
-    pub try_retrieve_from_iroh: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

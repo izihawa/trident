@@ -31,6 +31,9 @@ use trident_storage::iroh_node::IrohNode;
 fn return_true() -> bool {
     true
 }
+fn return_false() -> bool {
+    false
+}
 
 /// Simple program to greet a person
 #[derive(Parser)]
@@ -65,8 +68,6 @@ struct TablesCreateRequest {
     sinks: Vec<String>,
     #[serde(default = "return_true")]
     keep_blob: bool,
-    #[serde(default = "return_true")]
-    try_retrieve_from_iroh: bool,
 }
 
 #[derive(Deserialize)]
@@ -86,6 +87,8 @@ struct TablesSyncRequest {
     #[serde(default)]
     download_policy: Option<DownloadPolicy>,
     threads: u32,
+    #[serde(default = "return_false")]
+    should_send_to_sink: bool,
 }
 
 #[derive(Deserialize)]
@@ -305,7 +308,6 @@ async fn tables_create(
             &tables_create_request.storage,
             tables_create_request.sinks,
             tables_create_request.keep_blob,
-            tables_create_request.try_retrieve_from_iroh,
         )
         .await
     {
@@ -393,6 +395,7 @@ async fn tables_sync(
             &table,
             tables_sync_request.download_policy,
             tables_sync_request.threads,
+            tables_sync_request.should_send_to_sink,
         )
         .await
     {

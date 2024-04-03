@@ -7,24 +7,24 @@ use crate::utils::key_to_bytes;
 use crate::IrohDoc;
 use async_stream::stream;
 use futures::{Stream, StreamExt, TryStreamExt};
+use iroh::bytes::store::fs::Store;
 use iroh::bytes::store::ExportMode;
 use iroh::bytes::Hash;
 use iroh::client::{Entry, LiveEvent};
 use iroh::net::key::PublicKey;
 use iroh::net::NodeAddr;
-use iroh::rpc_protocol::{BlobDownloadRequest, DownloadLocation, SetTagOption, ShareMode};
+use iroh::node::Node;
+use iroh::rpc_protocol::{BlobDownloadRequest, DownloadMode, SetTagOption, ShareMode};
 use iroh::sync::store::{DownloadPolicy, Query, SortBy, SortDirection};
 use iroh::sync::{AuthorId, ContentStatus, PeerIdBytes};
 use iroh::ticket::DocTicket;
 use iroh_base::hash::BlobFormat;
 use lru::LruCache;
 use std::collections::{HashMap, HashSet};
+use std::io;
 use std::num::NonZeroUsize;
-use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use iroh::bytes::store::file::Store;
-use iroh::node::Node;
 use tokio::io::AsyncRead;
 use tokio_task_pool::Pool;
 use tokio_util::bytes;
@@ -268,7 +268,7 @@ impl Storage {
                                     break;
                                 }
                             };
-                            if self.get_path(key).metadata().map(|x| x.len()).unwrap_or(0) == 0 {
+                            if self.get_path(key).unwrap().metadata().map(|x| x.len()).unwrap_or(0) == 0 {
                                 if let Err(error) = self.node
                                     .blobs
                                     .delete_blob(entry.content_hash())
@@ -289,41 +289,58 @@ impl Storage {
         }
     }
 
-    async fn download_entry_from_peers(&self, entry: &Entry, peers: &[PeerIdBytes]) -> Result<()> {
+    async fn download_entry_from_peers(
+        &self,
+        entry: &Entry,
+        peers: &[PeerIdBytes],
+        mode: DownloadMode,
+        should_send_to_sink: bool,
+    ) -> Result<()> {
         let key = std::str::from_utf8(entry.key()).map_err(Error::incorrect_key)?;
+        let mut node_addrs = Vec::with_capacity(peers.len());
         for peer in peers {
-            let node_addr = match PublicKey::from_bytes(&peer) {
-                Ok(public_key) => NodeAddr::new(public_key),
+            match PublicKey::from_bytes(&peer) {
+                Ok(public_key) => node_addrs.push(NodeAddr::new(public_key)),
                 Err(_signing_error) => {
                     warn!("potential db corruption: peers per doc can't be decoded");
                     continue;
                 }
             };
-            let progress = self
-                .node
-                .blobs
-                .download(BlobDownloadRequest {
-                    hash: entry.content_hash(),
-                    format: BlobFormat::Raw,
-                    peer: node_addr,
-                    tag: SetTagOption::Auto,
-                    out: DownloadLocation::External {
-                        path: self.get_path(key),
-                        in_place: true,
-                    },
-                })
-                .await
-                .map_err(Error::io_error)?;
-            match progress.finish().await {
-                Ok(import_result) => {
-                    if import_result.local_size + import_result.downloaded_size
-                        == entry.content_len()
-                    {
-                        return Ok(());
+        }
+        let progress = self
+            .node
+            .blobs
+            .download(BlobDownloadRequest {
+                hash: entry.content_hash(),
+                format: BlobFormat::Raw,
+                tag: SetTagOption::Auto,
+                nodes: node_addrs,
+                mode,
+            })
+            .await
+            .map_err(Error::io_error)?;
+
+        match progress.finish().await {
+            Ok(import_result) => {
+                info!(
+                        "found local_size {}, downloaded_size {}, content_len {}",
+                        import_result.local_size,
+                        import_result.downloaded_size,
+                        entry.content_len()
+                    );
+                if import_result.local_size + import_result.downloaded_size
+                    == entry.content_len()
+                {
+                    self.process_remote_entry(key, entry).await?;
+                    if should_send_to_sink {
+                        if let Err(error) = self.process_sinks(key).await {
+                            warn!(error = ?error);
+                        }
                     }
+                    return Ok(());
                 }
-                Err(error) => warn!(error = ?error),
             }
+            Err(error) => warn!(error = ?error),
         }
         Err(Error::failed_download(key))
     }
@@ -332,6 +349,7 @@ impl Storage {
         &self,
         download_policy: Option<DownloadPolicy>,
         threads: u32,
+        should_send_to_sink: bool,
     ) -> Result<()> {
         let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await else {
             return Ok(());
@@ -365,8 +383,9 @@ impl Storage {
                 let peers0 = peers.clone();
                 let join_handle = pool
                     .spawn(async move {
-                        if let Err(error) =
-                            storage0.download_entry_from_peers(&entry, &peers0).await
+                        if let Err(error) = storage0
+                            .download_entry_from_peers(&entry, &peers0,DownloadMode::Queued, should_send_to_sink)
+                            .await
                         {
                             warn!(error = ?error);
                         }
@@ -379,7 +398,7 @@ impl Storage {
         Ok(())
     }
 
-    fn get_path(&self, key: &str) -> PathBuf {
+    fn get_path(&self, key: &str) -> io::Result<PathBuf> {
         if let Some(file_shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
             let file_shard = &self.shards[&file_shard_config.name];
             return file_shard.get_path_for(key);
@@ -388,7 +407,7 @@ impl Storage {
     }
 
     async fn process_sinks(&self, key: &str) -> Result<()> {
-        let shard_path = self.get_path(key);
+        let shard_path = self.get_path(key).map_err(Error::io_error)?;
         for sink in &self.sinks {
             if let Err(error) = sink.send(key, &shard_path).await {
                 warn!(error = ?error);
@@ -405,7 +424,7 @@ impl Storage {
             self.delete_from_fs(key).await?;
             Ok(None)
         } else {
-            let shard_path = self.get_path(key);
+            let shard_path = self.get_path(key).map_err(Error::io_error)?;
             if !shard_path.exists() {
                 info!(action = "export_file", key = ?key);
                 self.iroh_doc()
@@ -477,24 +496,6 @@ impl Storage {
     }
 
     pub async fn get(&self, key: &str) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
-        let first_shard_path = self
-            .hash_ring
-            .range(key, 1)
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::storage("no shards"))?;
-        let shard = &self.shards[&first_shard_path.name];
-        match shard.open_store(key).await {
-            Ok(Some(file)) => {
-                let file_size = file.metadata().await.unwrap().size();
-                return Ok(Some((Box::new(file), file_size)));
-            }
-            Err(e) => return Err(Error::io_error(e)),
-            Ok(None) => {}
-        }
-        if !self.table_config.try_retrieve_from_iroh {
-            return Ok(None);
-        }
         let entry = self
             .iroh_doc
             .get_one(
@@ -504,7 +505,7 @@ impl Storage {
             .map_err(Error::entry)?;
         if let Some(entry) = entry {
             if let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await {
-                self.download_entry_from_peers(&entry, &peers).await?;
+                self.download_entry_from_peers(&entry, &peers, DownloadMode::Direct, true).await?;
             }
             let file_size = entry.content_len();
             return Ok(Some((
@@ -550,19 +551,3 @@ impl Storage {
             .map_err(Error::storage)
     }
 }
-
-/*
-q_struct = StructType([
-    StructField("q", StringType(), True)
-])
-
-def explode_to_q(jline):
-    rows = []
-    jreq = jline.get("request")
-    if not jreq:
-        return rows
-
-    return [{"q": jreq.get("q")}]
-
-udf_decompress_lz4_kostil_q = F.udf(lambda z: from_lz4(z, explode_to_q), ArrayType(q_struct))
- */

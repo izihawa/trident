@@ -3,7 +3,7 @@ use crate::utils::FRAGMENT;
 use async_stream::stream;
 use percent_encoding::utf8_percent_encode;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::AsyncRead;
 use tokio_stream::Stream;
@@ -12,6 +12,33 @@ use tracing::info;
 #[derive(Clone)]
 pub struct FileShard {
     path: PathBuf,
+}
+
+pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
+    let mut components = path.as_ref().components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
 }
 
 impl FileShard {
@@ -28,16 +55,21 @@ impl FileShard {
         &self.path
     }
 
-    pub fn get_path_for(&self, key: &str) -> PathBuf {
-        self.path.join(
+    pub fn get_path_for(&self, key: &str) -> io::Result<PathBuf> {
+        let full_path = self.path.join(
             utf8_percent_encode(key, FRAGMENT)
                 .collect::<String>()
                 .to_lowercase(),
-        )
+        );
+        let cleaned_path = normalize_path(full_path);
+        if !cleaned_path.starts_with(&self.path) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "path traversal attempt"))
+        }
+        Ok(cleaned_path)
     }
 
     pub async fn open_store(&self, key: &str) -> io::Result<Option<File>> {
-        let file_path = self.get_path_for(key);
+        let file_path = self.get_path_for(key)?;
         match File::open(file_path).await {
             Ok(file) => Ok(Some(file)),
             Err(e) => match e.kind() {
@@ -48,7 +80,7 @@ impl FileShard {
     }
 
     pub async fn exists(&self, key: &str) -> io::Result<Option<PathBuf>> {
-        let file_path = self.get_path_for(key);
+        let file_path = self.get_path_for(key)?;
         if tokio::fs::try_exists(&file_path).await? {
             Ok(Some(file_path))
         } else {
@@ -61,8 +93,8 @@ impl FileShard {
         key: &str,
         mut stream: S,
     ) -> io::Result<PathBuf> {
-        let file_path = self.get_path_for(key);
-        let tmp_file_path = self.get_path_for(&format!("~{}", key));
+        let file_path = self.get_path_for(key)?;
+        let tmp_file_path = self.get_path_for(&format!("~{}", key))?;
 
         let mut tmp_file = File::create(&tmp_file_path).await?;
         tokio::io::copy(&mut stream, &mut tmp_file).await?;
