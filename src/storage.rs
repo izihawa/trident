@@ -8,7 +8,7 @@ use crate::IrohDoc;
 use async_stream::stream;
 use futures::{Stream, StreamExt, TryStreamExt};
 use iroh::bytes::store::fs::Store;
-use iroh::bytes::store::ExportMode;
+use iroh::bytes::store::{ExportMode, Map};
 use iroh::bytes::Hash;
 use iroh::client::{Entry, LiveEvent};
 use iroh::net::key::PublicKey;
@@ -323,14 +323,12 @@ impl Storage {
         match progress.finish().await {
             Ok(import_result) => {
                 info!(
-                        "found local_size {}, downloaded_size {}, content_len {}",
-                        import_result.local_size,
-                        import_result.downloaded_size,
-                        entry.content_len()
-                    );
-                if import_result.local_size + import_result.downloaded_size
-                    == entry.content_len()
-                {
+                    "found local_size {}, downloaded_size {}, content_len {}",
+                    import_result.local_size,
+                    import_result.downloaded_size,
+                    entry.content_len()
+                );
+                if import_result.local_size + import_result.downloaded_size == entry.content_len() {
                     self.process_remote_entry(key, entry).await?;
                     if should_send_to_sink {
                         if let Err(error) = self.process_sinks(key).await {
@@ -384,7 +382,12 @@ impl Storage {
                 let join_handle = pool
                     .spawn(async move {
                         if let Err(error) = storage0
-                            .download_entry_from_peers(&entry, &peers0,DownloadMode::Queued, should_send_to_sink)
+                            .download_entry_from_peers(
+                                &entry,
+                                &peers0,
+                                DownloadMode::Queued,
+                                should_send_to_sink,
+                            )
                             .await
                         {
                             warn!(error = ?error);
@@ -504,19 +507,23 @@ impl Storage {
             .await
             .map_err(Error::entry)?;
         if let Some(entry) = entry {
-            if let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await {
-                self.download_entry_from_peers(&entry, &peers, DownloadMode::Direct, true).await?;
+            if let Ok(Some(db_entry)) = self.node.db().get(&entry.content_hash()).await {
+                if !db_entry.is_complete() {
+                    if let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await {
+                        self.download_entry_from_peers(&entry, &peers, DownloadMode::Direct, true)
+                            .await?;
+                    }
+                }
+                return Ok(Some((
+                    Box::new(
+                        entry
+                            .content_reader(self.node.client())
+                            .await
+                            .map_err(Error::storage)?,
+                    ),
+                    entry.content_len(),
+                )));
             }
-            let file_size = entry.content_len();
-            return Ok(Some((
-                Box::new(
-                    entry
-                        .content_reader(self.node.client())
-                        .await
-                        .map_err(Error::storage)?,
-                ),
-                file_size,
-            )));
         }
         Ok(None)
     }

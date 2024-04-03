@@ -63,7 +63,10 @@ impl FileShard {
         );
         let cleaned_path = normalize_path(full_path);
         if !cleaned_path.starts_with(&self.path) {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "path traversal attempt"))
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "path traversal attempt",
+            ));
         }
         Ok(cleaned_path)
     }
