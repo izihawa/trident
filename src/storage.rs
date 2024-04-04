@@ -6,7 +6,7 @@ use crate::sinks::Sink;
 use crate::utils::key_to_bytes;
 use crate::IrohDoc;
 use async_stream::stream;
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt};
 use iroh::bytes::store::fs::Store;
 use iroh::bytes::store::{ExportMode, Map};
 use iroh::bytes::Hash;
@@ -250,46 +250,6 @@ impl Storage {
         Ok(storage)
     }
 
-    pub async fn check_integrity(&self) {
-        let mut stream = self.iroh_doc.get_many(Query::all()).await.unwrap();
-        loop {
-            tokio::select! {
-                biased;
-                _ = self.cancellation_token.cancelled() => {
-                    info!("cancel");
-                    break;
-                },
-                entry = stream.try_next() => {
-                    match entry.unwrap() {
-                        Some(entry) => {
-                            let key = match std::str::from_utf8(entry.key()).map_err(Error::incorrect_key) {
-                                Ok(key) => key,
-                                Err(error) => {
-                                    error!(error = ?error);
-                                    break;
-                                }
-                            };
-                            if self.get_path(key).unwrap().metadata().map(|x| x.len()).unwrap_or(0) == 0 {
-                                if let Err(error) = self.node
-                                    .blobs
-                                    .delete_blob(entry.content_hash())
-                                    .await
-                                    .map_err(Error::entry) {
-                                    error!(error = ?error);
-                                }
-                                if let Err(error) = self.delete_from_fs(key).await {
-                                    error!(error = ?error);
-                                }
-                            }
-                        }
-                        None => break,
-                    }
-
-                }
-            }
-        }
-    }
-
     async fn download_entry_from_peers(
         &self,
         entry: &Entry,
@@ -386,7 +346,7 @@ impl Storage {
                             .download_entry_from_peers(
                                 &entry,
                                 &peers0,
-                                DownloadMode::Direct,
+                                DownloadMode::Queued,
                                 should_send_to_sink,
                             )
                             .await
@@ -402,16 +362,19 @@ impl Storage {
         Ok(())
     }
 
-    fn get_path(&self, key: &str) -> io::Result<PathBuf> {
+    fn get_path(&self, key: &str) -> io::Result<Option<PathBuf>> {
         if let Some(file_shard_config) = self.hash_ring.range(key, 1).into_iter().next() {
             let file_shard = &self.shards[&file_shard_config.name];
-            return file_shard.get_path_for(key);
+            return Ok(Some(file_shard.get_path_for(key)?));
         }
-        unreachable!()
+        return Ok(None)
     }
 
     async fn process_sinks(&self, key: &str) -> Result<()> {
-        let shard_path = self.get_path(key).map_err(Error::io_error)?;
+        let Some(shard_path) = self.get_path(key).map_err(Error::io_error)? else {
+            return Err(Error::sink("Cannot sink without exporting to FS"));
+        };
+
         for sink in &self.sinks {
             if let Err(error) = sink.send(key, &shard_path).await {
                 warn!(error = ?error);
@@ -424,11 +387,13 @@ impl Storage {
 
     async fn process_remote_entry(&self, key: &str, entry: &Entry) -> Result<Option<PathBuf>> {
         info!(action = "process_remote_entry", key = ?key);
+        let Some(shard_path) = self.get_path(key).map_err(Error::io_error)? else {
+            return Ok(None);
+        };
         if entry.content_len() == 0 {
             self.delete_from_fs(key).await?;
             Ok(None)
         } else {
-            let shard_path = self.get_path(key).map_err(Error::io_error)?;
             if !shard_path.exists() {
                 info!(action = "export_file", key = ?key);
                 self.iroh_doc()

@@ -163,7 +163,6 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/exists/", get(tables_exists))
                 .route("/tables/:table/", delete(tables_drop))
                 .route("/tables/:table/import/", post(tables_import))
-                .route("/tables/:table/integrity/", post(tables_integrity))
                 .route("/tables/:table/sync/", post(tables_sync))
                 .route("/tables/:table/", get(table_ls))
                 .route("/tables/:table/share/", get(table_share))
@@ -370,13 +369,6 @@ async fn tables_import(
                 Err(error) => error.into_response(),
             }
         }
-        Err(e) => e.into_response(),
-    }
-}
-
-async fn tables_integrity(State(state): State<AppState>, Path(table): Path<String>) -> Response {
-    match state.iroh_node.read().await.tables_integrity(&table).await {
-        Ok(_) => Response::builder().body(Body::default()).unwrap(),
         Err(e) => e.into_response(),
     }
 }
