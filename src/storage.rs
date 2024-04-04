@@ -89,6 +89,7 @@ impl Storage {
                 info!("started");
                 loop {
                     tokio::select! {
+                        biased;
                         _ = cancellation_token.cancelled() => {
                             info!("cancel");
                             return Ok::<(), Error>(())
@@ -385,7 +386,7 @@ impl Storage {
                             .download_entry_from_peers(
                                 &entry,
                                 &peers0,
-                                DownloadMode::Queued,
+                                DownloadMode::Direct,
                                 should_send_to_sink,
                             )
                             .await

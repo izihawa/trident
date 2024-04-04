@@ -1809,9 +1809,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.25"
+version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fbd2820c5e49886948654ab546d0688ff24530286bdcf8fca3cefb16d4618eb"
+checksum = "81fe527a889e1532da5c525686d96d4c2e74cdd345badf8dfef9f6b39dd5f5e8"
 dependencies = [
  "bytes",
  "fnv",
@@ -2229,7 +2229,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2271,7 +2271,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "aead",
  "anyhow",
@@ -2312,7 +2312,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -2353,7 +2353,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2394,7 +2394,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -2414,7 +2414,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "aead",
  "anyhow",
@@ -2484,7 +2484,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.13.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#688929339a2b0e305afbc8bafc1ac85e27fd4858"
+source = "git+https://github.com/izihawa/iroh?branch=main#472f25378b618434ff364d33390e9c230f2d9c3a"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2774,9 +2774,9 @@ dependencies = [
 
 [[package]]
 name = "netlink-sys"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6471bf08e7ac0135876a9581bf3217ef0333c191c128d34878079f42ee150411"
+checksum = "416060d346fbaf1f23f9512963e3e878f1a78e707cb699ba9215761754244307"
 dependencies = [
  "bytes",
  "futures",

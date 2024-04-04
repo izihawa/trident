@@ -202,7 +202,6 @@ async fn app() -> Result<(), Error> {
                 Ok(iroh_node) => iroh_node
                     .into_inner()
                     .shutdown()
-                    .await
                     .map_err(Error::failed_shutdown)?,
                 Err(_) => Err(Error::io_error("iroh_node cannot be destructed"))?,
             };

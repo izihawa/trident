@@ -437,7 +437,7 @@ impl IrohNode {
         Ok(())
     }
 
-    pub async fn shutdown(self) -> Result<()> {
+    pub fn shutdown(self) -> Result<()> {
         self.node.shutdown();
         Ok(())
     }
