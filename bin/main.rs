@@ -415,12 +415,15 @@ async fn table_get(
     Path((table, key)): Path<(String, String)>,
 ) -> Response {
     match state.iroh_node.read().await.table_get(&table, &key).await {
-        Ok(Some((reader, file_size))) => match method {
+        Ok(Some((reader, file_size, hash))) => match method {
             Method::HEAD => Response::builder()
                 .header("Content-Length", file_size)
+                .header("X-Iroh-Hash", hash.to_string())
                 .body(Body::default())
                 .unwrap(),
             Method::GET => Response::builder()
+                .header("Content-Length", file_size)
+                .header("X-Iroh-Hash", hash.to_string())
                 .body(Body::from_stream(ReaderStream::new(reader)))
                 .unwrap(),
             _ => unreachable!(),

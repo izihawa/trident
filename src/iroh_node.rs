@@ -330,7 +330,7 @@ impl IrohNode {
         &self,
         table_name: &str,
         key: &str,
-    ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
+    ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64, Hash)>> {
         let table = self
             .tables
             .get(table_name)

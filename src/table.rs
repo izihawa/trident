@@ -456,7 +456,10 @@ impl Table {
         &self.iroh_doc
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
+    pub async fn get(
+        &self,
+        key: &str,
+    ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64, Hash)>> {
         let entry = self
             .iroh_doc
             .get_one(
@@ -480,6 +483,7 @@ impl Table {
                             .map_err(Error::storage)?,
                     ),
                     entry.content_len(),
+                    entry.content_hash(),
                 )));
             }
         }

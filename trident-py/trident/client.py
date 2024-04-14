@@ -95,12 +95,17 @@ class TridentClient(BaseClient):
         })
         return await response.read()
 
-    async def table_get(self, table: str, key: str, timeout: float = None) -> bytes | None:
+    async def table_get(self, table: str, key: str, timeout: float = None) -> dict | None:
         url = f"/tables/{table}/{key}"
         response = await self.get(url, timeout=timeout)
         if response is None:
             return None
-        return await response.read()
+        content = await response.read()
+        return {
+            'iroh_hash': response.headers['X-Iroh-Hash'],
+            'size': response.headers['Content-Length'],
+            'content': content
+        }
 
     async def table_get_chunks(self, table: str, key: str, timeout: float = None) -> AsyncGenerator[bytes, None]:
         url = f"/tables/{table}/{key}"
@@ -113,7 +118,11 @@ class TridentClient(BaseClient):
         async for line in response.content:
             yield line.decode()[:-1]
 
-    async def table_exists(self, table: str, key: str) -> bool:
+    async def table_exists(self, table: str, key: str) -> dict | None:
         url = f"/tables/{table}/{key}"
         response = await self.head(url)
-        return response is not None
+        if response is not None:
+            return {
+                'iroh_hash': response.headers['X-Iroh-Hash'],
+                'size': response.headers['Content-Length'],
+            }
