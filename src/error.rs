@@ -23,16 +23,10 @@ pub enum Error {
     Entry { description: String },
     #[error("io_error: {description}")]
     Io { description: String },
-    #[error("sink: {description}")]
-    Sink { description: String },
     #[error("missing_table: {description}")]
     MissingTable { description: String },
     #[error("missing_key: {description}")]
     MissingKey { description: String },
-    #[error("missing_sink: {description}")]
-    MissingSink { description: String },
-    #[error("existing_sink: {description}")]
-    ExistingSink { description: String },
     #[error("existing_table: {description}")]
     ExistingTable { description: String },
     #[error("storage: {description}")]
@@ -96,12 +90,6 @@ impl Error {
         }
     }
 
-    pub fn sink(error: impl Display) -> Self {
-        Error::Sink {
-            description: error.to_string(),
-        }
-    }
-
     pub fn missing_table(error: impl Display) -> Self {
         Error::MissingTable {
             description: error.to_string(),
@@ -110,17 +98,6 @@ impl Error {
 
     pub fn missing_key(error: impl Display) -> Self {
         Error::MissingKey {
-            description: error.to_string(),
-        }
-    }
-
-    pub fn missing_sink(error: impl Display) -> Self {
-        Error::MissingSink {
-            description: error.to_string(),
-        }
-    }
-    pub fn existing_sink(error: impl Display) -> Self {
-        Error::ExistingSink {
             description: error.to_string(),
         }
     }

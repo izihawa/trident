@@ -17,14 +17,6 @@ class TridentClient(BaseClient):
                 raise ExternalServiceError(None, response.status, data)
         return response
 
-    async def sinks_ls(self) -> dict:
-        response = await self.get(f"/sinks/")
-        return await response.json()
-
-    async def sinks_create(self, sink: str, config: dict) -> dict:
-        response = await self.post(f"/sinks/{sink}/", json=config)
-        return await response.read()
-
     async def tables_ls(self) -> dict:
         response = await self.get(f"/tables/")
         return await response.json()
@@ -48,8 +40,6 @@ class TridentClient(BaseClient):
         ticket: str,
         storage: str,
         download_policy: dict | None = None,
-        sinks: tuple | list = tuple(),
-        keep_blob: bool = True,
     ) -> bytes:
         url = f"/tables/{table}/import/"
         response = await self.post(
@@ -58,8 +48,6 @@ class TridentClient(BaseClient):
                 'ticket': ticket,
                 'storage': storage,
                 'download_policy': download_policy,
-                'sinks': sinks,
-                'keep_blob': keep_blob,
             },
         )
         return await response.read()

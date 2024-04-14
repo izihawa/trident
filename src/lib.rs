@@ -23,8 +23,7 @@ pub mod error;
 pub mod file_shard;
 mod hash_ring;
 pub mod iroh_node;
-mod sinks;
-mod storage;
+mod table;
 mod utils;
 
 pub type IrohDoc = iroh::client::Doc<FlumeConnection<ProviderResponse, ProviderRequest>>;

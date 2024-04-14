@@ -8,10 +8,6 @@ fn return_0() -> u32 {
     0
 }
 
-fn return_true() -> bool {
-    true
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StorageEngineConfig {
     pub shards: Vec<ShardConfig>,
@@ -47,22 +43,11 @@ pub struct IpfsConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SinkConfig {
-    S3(S3Config),
-    Ipfs(IpfsConfig),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TableConfig {
     pub id: String,
     #[serde(default = "DownloadPolicy::default")]
     pub download_policy: DownloadPolicy,
-    #[serde(default = "Vec::new")]
-    pub sinks: Vec<String>,
-    pub storage_name: String,
-    #[serde(default = "return_true")]
-    pub keep_blob: bool,
+    pub storage_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -86,8 +71,6 @@ pub struct IrohConfig {
     pub path: PathBuf,
     pub bind_port: u16,
     #[serde(default = "HashMap::new")]
-    pub sinks: HashMap<String, SinkConfig>,
-    #[serde(default = "HashMap::new")]
     pub storages: HashMap<String, StorageEngineConfig>,
     pub gc_interval_secs: Option<u64>,
 }
@@ -107,23 +90,19 @@ impl Config {
                 tables: Default::default(),
                 path: base_path.join("iroh").to_path_buf(),
                 bind_port: 11204,
-                sinks: Default::default(),
-                storages: HashMap::from_iter(
-                    vec![(
-                        "default".to_string(),
-                        StorageEngineConfig {
-                            shards: (1..=shards)
-                                .map(|i| ShardConfig {
-                                    name: format!("shard{i}"),
-                                    path: base_path.join("data").join(format!("shard{i}")),
-                                    weight: 1,
-                                })
-                                .collect(),
-                            import_threads: 0,
-                        },
-                    )]
-                    .into_iter(),
-                ),
+                storages: HashMap::from_iter(vec![(
+                    "default".to_string(),
+                    StorageEngineConfig {
+                        shards: (1..=shards)
+                            .map(|i| ShardConfig {
+                                name: format!("shard{i}"),
+                                path: base_path.join("data").join(format!("shard{i}")),
+                                weight: 1,
+                            })
+                            .collect(),
+                        import_threads: 0,
+                    },
+                )]),
                 gc_interval_secs: None,
             },
         }

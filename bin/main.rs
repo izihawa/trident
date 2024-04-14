@@ -23,17 +23,10 @@ use tokio_util::task::TaskTracker;
 use tower_http::trace::{self, TraceLayer};
 use tracing::{info, info_span, Instrument, Level};
 use tracing_subscriber::EnvFilter;
-use trident_storage::config::{Config, SinkConfig, TableConfig};
+use trident_storage::config::{Config, TableConfig};
 use trident_storage::error::Error;
 
 use trident_storage::iroh_node::IrohNode;
-
-fn return_true() -> bool {
-    true
-}
-fn return_false() -> bool {
-    false
-}
 
 /// Simple program to greet a person
 #[derive(Parser)]
@@ -63,23 +56,16 @@ enum Commands {
 
 #[derive(Deserialize)]
 struct TablesCreateRequest {
-    storage: String,
-    #[serde(default)]
-    sinks: Vec<String>,
-    #[serde(default = "return_true")]
-    keep_blob: bool,
+    storage: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct TablesImportRequest {
     ticket: String,
-    storage: String,
+    #[serde(default)]
+    storage: Option<String>,
     #[serde(default)]
     download_policy: Option<DownloadPolicy>,
-    #[serde(default)]
-    sinks: Vec<String>,
-    #[serde(default = "return_true")]
-    keep_blob: bool,
 }
 
 #[derive(Deserialize)]
@@ -87,8 +73,6 @@ struct TablesSyncRequest {
     #[serde(default)]
     download_policy: Option<DownloadPolicy>,
     threads: u32,
-    #[serde(default = "return_false")]
-    should_send_to_sink: bool,
 }
 
 #[derive(Deserialize)]
@@ -111,11 +95,6 @@ struct AppState {
 #[derive(Serialize)]
 struct TablesExistsResponse {
     pub exists: bool,
-}
-
-#[derive(Serialize)]
-struct SinksLsResponse {
-    pub sinks: HashMap<String, SinkConfig>,
 }
 
 #[derive(Serialize)]
@@ -156,8 +135,6 @@ async fn app() -> Result<(), Error> {
 
             // build our application with a route
             let app = Router::new()
-                .route("/sinks/", get(sinks_ls))
-                .route("/sinks/:sink/", post(sinks_create))
                 .route("/tables/", get(tables_ls))
                 .route("/tables/:table/", post(tables_create))
                 .route("/tables/:table/exists/", get(tables_exists))
@@ -257,41 +234,6 @@ fn main() -> Result<(), Error> {
         .block_on(app())
 }
 
-async fn sinks_ls(State(state): State<AppState>) -> Response {
-    Json(SinksLsResponse {
-        sinks: state.iroh_node.read().await.sinks_ls().await,
-    })
-    .into_response()
-}
-
-async fn sinks_create(
-    State(state): State<AppState>,
-    Path(sink): Path<String>,
-    Json(sink_config): Json<SinkConfig>,
-) -> Response {
-    match state
-        .iroh_node
-        .read()
-        .await
-        .sinks_create(&sink, sink_config)
-        .await
-    {
-        Ok(_) => {
-            match state
-                .config
-                .read()
-                .await
-                .save_config(&state.config_path)
-                .await
-            {
-                Ok(_) => Response::builder().body(Body::default()).unwrap(),
-                Err(error) => error.into_response(),
-            }
-        }
-        Err(e) => e.into_response(),
-    }
-}
-
 async fn tables_create(
     State(state): State<AppState>,
     Path(table): Path<String>,
@@ -301,12 +243,7 @@ async fn tables_create(
         .iroh_node
         .write()
         .await
-        .tables_create(
-            &table,
-            &tables_create_request.storage,
-            tables_create_request.sinks,
-            tables_create_request.keep_blob,
-        )
+        .tables_create(&table, tables_create_request.storage)
         .await
     {
         Ok(id) => {
@@ -346,12 +283,10 @@ async fn tables_import(
         .tables_import(
             &table,
             &tables_import_request.ticket,
-            &tables_import_request.storage,
+            tables_import_request.storage,
             tables_import_request
                 .download_policy
                 .unwrap_or_else(|| DownloadPolicy::EverythingExcept(vec![])),
-            tables_import_request.sinks,
-            tables_import_request.keep_blob,
         )
         .await
     {
@@ -386,7 +321,6 @@ async fn tables_sync(
             &table,
             tables_sync_request.download_policy,
             tables_sync_request.threads,
-            tables_sync_request.should_send_to_sink,
         )
         .await
     {

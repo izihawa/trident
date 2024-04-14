@@ -1,7 +1,6 @@
-use crate::config::{Config, SinkConfig, StorageEngineConfig, TableConfig};
+use crate::config::{Config, StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
-use crate::sinks::{IpfsSink, S3Sink, Sink};
-use crate::storage::Storage;
+use crate::table::Table;
 use async_stream::stream;
 use futures::StreamExt;
 use iroh::bytes::store::fs::Store;
@@ -25,11 +24,10 @@ use tokio_util::task::TaskTracker;
 use tracing::info;
 
 pub struct IrohNode {
-    table_storages: HashMap<String, Storage>,
+    tables: HashMap<String, Table>,
     author_id: AuthorId,
     config: Arc<RwLock<Config>>,
     fs_storage_configs: HashMap<String, StorageEngineConfig>,
-    sinks: HashMap<String, Arc<dyn Sink>>,
     cancellation_token: CancellationToken,
     task_tracker: TaskTracker,
     node: Node<Store>,
@@ -90,20 +88,7 @@ impl IrohNode {
             }
         };
 
-        let mut sinks = HashMap::new();
-        for (name, sink_config) in config_lock.iroh.sinks.clone() {
-            match sink_config {
-                SinkConfig::S3(s3_config) => {
-                    let sink = S3Sink::new(&name, &s3_config).await;
-                    sinks.insert(name, Arc::new(sink) as Arc<dyn Sink>)
-                }
-                SinkConfig::Ipfs(ipfs_config) => {
-                    let sink = IpfsSink::new(&name, &ipfs_config).await;
-                    sinks.insert(name, Arc::new(sink) as Arc<dyn Sink>)
-                }
-            };
-        }
-        let mut table_storages = HashMap::new();
+        let mut tables = HashMap::new();
         let storage_configs = config_lock.iroh.storages.clone();
         for (table_name, table_config) in &mut config_lock.iroh.tables {
             let iroh_doc = node
@@ -119,24 +104,21 @@ impl IrohNode {
                 .map_err(Error::doc)?;
 
             iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
-            let materialised_sinks = table_config
-                .sinks
-                .iter()
-                .map(|sink_name| sinks[sink_name].clone())
-                .collect();
-            let storage_engine = Storage::new(
+            let table = Table::new(
                 table_name,
                 author_id,
                 node.clone(),
                 iroh_doc.clone(),
-                storage_configs[&table_config.storage_name].clone(),
-                materialised_sinks,
+                table_config
+                    .storage_name
+                    .as_ref()
+                    .map(|s| storage_configs[s].clone()),
                 table_config.clone(),
                 cancellation_token.clone(),
                 task_tracker.clone(),
             )
             .await?;
-            table_storages.insert(table_name.clone(), storage_engine);
+            tables.insert(table_name.clone(), table);
         }
 
         let fs_storage_configs = config_lock.iroh.storages.clone();
@@ -145,35 +127,15 @@ impl IrohNode {
 
         let iroh_node = IrohNode {
             node,
-            table_storages,
+            tables,
             author_id,
             config,
             fs_storage_configs,
-            sinks,
             cancellation_token: cancellation_token.clone(),
             task_tracker: task_tracker.clone(),
         };
 
         Ok(iroh_node)
-    }
-
-    pub async fn sinks_ls(&self) -> HashMap<String, SinkConfig> {
-        self.config.read().await.iroh.sinks.clone()
-    }
-
-    pub async fn sinks_create(&self, sink_name: &str, sink_config: SinkConfig) -> Result<()> {
-        match self
-            .config
-            .write()
-            .await
-            .iroh
-            .sinks
-            .entry(sink_name.to_string())
-        {
-            Entry::Occupied(_) => return Err(Error::existing_sink(sink_name)),
-            Entry::Vacant(entry) => entry.insert(sink_config),
-        };
-        Ok(())
     }
 
     pub async fn tables_ls(&self) -> HashMap<String, TableConfig> {
@@ -183,11 +145,9 @@ impl IrohNode {
     pub async fn tables_create(
         &mut self,
         table_name: &str,
-        storage_name: &str,
-        sinks: Vec<String>,
-        keep_blob: bool,
+        storage_name: Option<String>,
     ) -> Result<NamespaceId> {
-        match self.table_storages.entry(table_name.to_string()) {
+        match self.tables.entry(table_name.to_string()) {
             Entry::Occupied(_) => Err(Error::existing_table(table_name)),
             Entry::Vacant(entry) => {
                 let iroh_doc = self
@@ -197,30 +157,23 @@ impl IrohNode {
                     .create()
                     .await
                     .map_err(Error::table)?;
-                let materialised_sinks = sinks
-                    .iter()
-                    .map(|sink_name| self.sinks[sink_name].clone())
-                    .collect();
                 let table_config = TableConfig {
                     id: iroh_doc.id().to_string(),
                     download_policy: DownloadPolicy::default(),
-                    sinks,
-                    storage_name: storage_name.to_string(),
-                    keep_blob,
+                    storage_name: storage_name.clone(),
                 };
-                let storage_engine = Storage::new(
+                let table = Table::new(
                     table_name,
                     self.author_id,
                     self.node.clone(),
                     iroh_doc.clone(),
-                    self.fs_storage_configs[storage_name].clone(),
-                    materialised_sinks,
+                    storage_name.map(|s| self.fs_storage_configs[&s].clone()),
                     table_config.clone(),
                     self.cancellation_token.clone(),
                     self.task_tracker.clone(),
                 )
                 .await?;
-                entry.insert(storage_engine);
+                entry.insert(table);
                 self.config
                     .write()
                     .await
@@ -234,21 +187,19 @@ impl IrohNode {
     }
 
     pub async fn tables_exists(&self, table_name: &str) -> bool {
-        return self.table_storages.get(table_name).is_some();
+        return self.tables.get(table_name).is_some();
     }
 
     pub async fn tables_import(
         &mut self,
         table_name: &str,
         table_ticket: &str,
-        storage_name: &str,
+        storage_name: Option<String>,
         download_policy: DownloadPolicy,
-        sinks: Vec<String>,
-        keep_blob: bool,
     ) -> Result<NamespaceId> {
         let ticket = DocTicket::from_str(table_ticket).map_err(Error::doc)?;
         let nodes = ticket.nodes.clone();
-        match self.table_storages.entry(table_name.to_string()) {
+        match self.tables.entry(table_name.to_string()) {
             Entry::Occupied(entry) => {
                 let iroh_doc = entry.get().iroh_doc();
                 if iroh_doc.id() != ticket.capability.id() {
@@ -270,24 +221,17 @@ impl IrohNode {
                     .await
                     .map_err(Error::doc)?;
                 iroh_doc.start_sync(nodes).await.map_err(Error::doc)?;
-                let materialised_sinks = sinks
-                    .iter()
-                    .map(|sink_name| self.sinks[sink_name].clone())
-                    .collect();
                 let table_config = TableConfig {
                     id: iroh_doc.id().to_string(),
                     download_policy,
-                    sinks,
-                    storage_name: storage_name.to_string(),
-                    keep_blob,
+                    storage_name: storage_name.clone(),
                 };
-                let storage_engine = Storage::new(
+                let storage_engine = Table::new(
                     table_name,
                     self.author_id,
                     self.node.clone(),
                     iroh_doc.clone(),
-                    self.fs_storage_configs[storage_name].clone(),
-                    materialised_sinks,
+                    storage_name.map(|s| self.fs_storage_configs[&s].clone()),
                     table_config.clone(),
                     self.cancellation_token.clone(),
                     self.task_tracker.clone(),
@@ -310,28 +254,24 @@ impl IrohNode {
         table_name: &str,
         download_policy: Option<DownloadPolicy>,
         threads: u32,
-        should_send_to_sink: bool,
     ) -> Result<()> {
-        let Some(storage) = self.table_storages.get(table_name) else {
+        let Some(table) = self.tables.get(table_name) else {
             return Err(Error::missing_table(table_name));
         };
-        let storage0 = storage.clone();
-        self.task_tracker.spawn(async move {
-            storage0
-                .download_missing(download_policy, threads, should_send_to_sink)
-                .await
-        });
+        let table0 = table.clone();
+        self.task_tracker
+            .spawn(async move { table0.download_missing(download_policy, threads).await });
         Ok(())
     }
 
     pub async fn tables_drop(&mut self, table_name: &str) -> Result<()> {
-        match self.table_storages.remove(table_name) {
+        match self.tables.remove(table_name) {
             None => Err(Error::missing_table(table_name)),
-            Some(table_storage) => {
+            Some(table) => {
                 self.node
                     .client()
                     .docs
-                    .drop_doc(table_storage.iroh_doc().id())
+                    .drop_doc(table.iroh_doc().id())
                     .await
                     .map_err(Error::doc)?;
                 Ok(self
@@ -353,8 +293,8 @@ impl IrohNode {
         key: &str,
         value: S,
     ) -> Result<Hash> {
-        match self.table_storages.get(table_name) {
-            Some(table_storage) => table_storage.insert(key, value).await,
+        match self.tables.get(table_name) {
+            Some(table) => table.insert(key, value).await,
             None => Err(Error::missing_table(table_name)),
         }
     }
@@ -366,10 +306,10 @@ impl IrohNode {
         to_table_name: &str,
         to_key: &str,
     ) -> Result<Hash> {
-        let Some(from_table) = self.table_storages.get(from_table_name) else {
+        let Some(from_table) = self.tables.get(from_table_name) else {
             return Err(Error::missing_table(from_table_name));
         };
-        let Some(to_table) = self.table_storages.get(to_table_name) else {
+        let Some(to_table) = self.tables.get(to_table_name) else {
             return Err(Error::missing_table(to_table_name));
         };
         let Some((from_hash, from_size)) = from_table.get_hash(from_key).await? else {
@@ -380,8 +320,8 @@ impl IrohNode {
     }
 
     pub async fn table_share(&self, table_name: &str) -> Result<DocTicket> {
-        match self.table_storages.get(table_name) {
-            Some(table_storage) => Ok(table_storage.share(ShareMode::Read).await?),
+        match self.tables.get(table_name) {
+            Some(table) => Ok(table.share(ShareMode::Read).await?),
             None => Err(Error::missing_table(table_name)),
         }
     }
@@ -391,26 +331,28 @@ impl IrohNode {
         table_name: &str,
         key: &str,
     ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
-        match self.table_storages.get(table_name) {
-            Some(table_storage) => table_storage.get(key).await,
-            None => Err(Error::missing_table(table_name)),
-        }
+        let table = self
+            .tables
+            .get(table_name)
+            .ok_or_else(|| Error::missing_table(table_name))?;
+        table.get(key).await
     }
 
     pub async fn table_delete(&self, table_name: &str, key: &str) -> Result<usize> {
-        match self.table_storages.get(table_name) {
-            Some(table_holder) => table_holder.delete(key).await,
-            None => Err(Error::missing_table(table_name)),
-        }
+        let table = self
+            .tables
+            .get(table_name)
+            .ok_or_else(|| Error::missing_table(table_name))?;
+        table.delete(key).await
     }
 
     pub fn table_keys(&self, table_name: &str) -> Option<impl Stream<Item = Result<String>>> {
-        self.table_storages.get(table_name).cloned().map_or_else(
+        self.tables.get(table_name).cloned().map_or_else(
             || None,
-            |table_storage| {
+            |table| {
                 Some(stream! {
-                for await el in table_storage.get_all() {
-                    yield Ok(format!("{}\n", std::str::from_utf8(el.unwrap().key()).unwrap()))
+                    for await el in table.get_all() {
+                        yield Ok(format!("{}\n", std::str::from_utf8(el.unwrap().key()).unwrap()))
                     }
                 })
             },
