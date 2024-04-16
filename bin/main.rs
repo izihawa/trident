@@ -51,8 +51,7 @@ enum Commands {
         /// Base path for Trident data
         base_path: PathBuf,
         /// The number of auto-generated sub-directories for keeping data
-        #[arg(default_value_t = 1)]
-        shards: u32,
+        shards: Option<u32>,
     },
 }
 

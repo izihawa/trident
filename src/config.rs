@@ -82,7 +82,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(base_path: &Path, shards: u32) -> Self {
+    pub fn new(base_path: &Path, shards: Option<u32>) -> Self {
         Config {
             http: Default::default(),
             iroh: IrohConfig {
@@ -93,7 +93,7 @@ impl Config {
                 storages: HashMap::from_iter(vec![(
                     "default".to_string(),
                     StorageEngineConfig {
-                        shards: (1..=shards)
+                        shards: (0..=shards.unwrap_or(0))
                             .map(|i| ShardConfig {
                                 name: format!("shard{i}"),
                                 path: base_path.join("data").join(format!("shard{i}")),

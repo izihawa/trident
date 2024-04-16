@@ -24,6 +24,14 @@ class TridentClient(BaseClient):
             return None
         return await response.read()
 
+    async def blobs_get_chunks(self, hash_: str, timeout: float = None) -> AsyncGenerator[bytes, None]:
+        url = f"/blobs/{hash_}"
+        response = await self.get(url, timeout=timeout)
+        if response is None:
+            return
+        async for data, _ in response.content.iter_chunks():
+            yield data
+
     async def tables_ls(self) -> dict:
         response = await self.get(f"/tables/")
         return await response.json()
