@@ -359,6 +359,18 @@ impl IrohNode {
         )
     }
 
+    pub async fn blobs_get(
+        &self,
+        hash: Hash,
+    ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
+        let blob_reader = self.node.blobs.read(hash).await.map_err(Error::blobs)?;
+        if !blob_reader.is_complete() {
+            return Ok(None);
+        }
+        let file_size = blob_reader.size();
+        Ok(Some((Box::new(blob_reader), file_size)))
+    }
+
     pub async fn send_shutdown(&self) -> Result<()> {
         self.node
             .client()

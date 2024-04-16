@@ -10,9 +10,11 @@ use axum::{
 use clap::{Parser, Subcommand};
 use futures::TryStreamExt;
 use iroh::sync::store::DownloadPolicy;
+use iroh_base::hash::Hash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::runtime::Builder;
 use tokio::signal;
@@ -135,6 +137,7 @@ async fn app() -> Result<(), Error> {
 
             // build our application with a route
             let app = Router::new()
+                .route("/blobs/:hash", get(blobs_get))
                 .route("/tables/", get(tables_ls))
                 .route("/tables/:table/", post(tables_create))
                 .route("/tables/:table/exists/", get(tables_exists))
@@ -232,6 +235,45 @@ fn main() -> Result<(), Error> {
         .build()
         .unwrap()
         .block_on(app())
+}
+
+async fn blobs_get(
+    State(state): State<AppState>,
+    method: Method,
+    Path(hash_str): Path<String>,
+) -> Response {
+    let Ok(hash) = Hash::from_str(&hash_str).map_err(Error::blobs) else {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::default())
+            .unwrap()
+    };
+    match state
+        .iroh_node
+        .read()
+        .await
+        .blobs_get(hash)
+        .await
+    {
+        Ok(Some((reader, file_size))) => match method {
+            Method::HEAD => Response::builder()
+                .header("Content-Length", file_size)
+                .header("X-Iroh-Hash", hash_str)
+                .body(Body::default())
+                .unwrap(),
+            Method::GET => Response::builder()
+                .header("Content-Length", file_size)
+                .header("X-Iroh-Hash", hash_str)
+                .body(Body::from_stream(ReaderStream::new(reader)))
+                .unwrap(),
+            _ => unreachable!(),
+        },
+        Ok(None) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::default())
+            .unwrap(),
+        Err(e) => e.into_response(),
+    }
 }
 
 async fn tables_create(
@@ -380,7 +422,8 @@ async fn table_insert(
         .await
     {
         Ok(hash) => Response::builder()
-            .body(Body::from(hash.to_string()))
+            .header("X-Iroh-Hash", hash.to_string())
+            .body(Body::default())
             .unwrap(),
         Err(e) => e.into_response(),
     }

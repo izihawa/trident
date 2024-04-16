@@ -17,6 +17,13 @@ class TridentClient(BaseClient):
                 raise ExternalServiceError(None, response.status, data)
         return response
 
+    async def blobs_get(self, hash_: str, timeout: float = None) -> bytes | None:
+        url = f"/blobs/{hash_}"
+        response = await self.get(url, timeout=timeout)
+        if response is None:
+            return None
+        return await response.read()
+
     async def tables_ls(self) -> dict:
         response = await self.get(f"/tables/")
         return await response.json()
@@ -71,10 +78,10 @@ class TridentClient(BaseClient):
         response = await self.delete(url)
         return await response.read()
 
-    async def table_insert(self, table: str, key: str, value: bytes) -> bytes:
+    async def table_insert(self, table: str, key: str, value: bytes) -> str:
         url = f"/tables/{table}/{key}"
         response = await self.put(url, data=value)
-        return await response.read()
+        return response.headers['X-Iroh-Hash']
 
     async def table_share(self, table: str) -> dict:
         url = f"/tables/{table}/share/"
@@ -124,5 +131,5 @@ class TridentClient(BaseClient):
         if response is not None:
             return {
                 'iroh_hash': response.headers['X-Iroh-Hash'],
-                'size': response.headers['Content-Length'],
+                'size': int(response.headers['Content-Length']),
             }

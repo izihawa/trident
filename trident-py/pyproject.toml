@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "izihawa-trident-client"
-version = "1.2.0"
+version = "1.2.2"
 description = ""
 authors = ["Pasha Podolsky <ppodolsky@me.com>"]
 readme = "README.md"
