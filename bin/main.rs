@@ -245,15 +245,9 @@ async fn blobs_get(
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
-            .unwrap()
+            .unwrap();
     };
-    match state
-        .iroh_node
-        .read()
-        .await
-        .blobs_get(hash)
-        .await
-    {
+    match state.iroh_node.read().await.blobs_get(hash).await {
         Ok(Some((reader, file_size))) => match method {
             Method::HEAD => Response::builder()
                 .header("Content-Length", file_size)

@@ -13,9 +13,9 @@ use iroh::client::{Entry, LiveEvent};
 use iroh::net::key::PublicKey;
 use iroh::net::NodeAddr;
 use iroh::node::Node;
-use iroh::rpc_protocol::{BlobDownloadRequest, SetTagOption, ShareMode};
+use iroh::rpc_protocol::{BlobDownloadRequest, DownloadMode, SetTagOption, ShareMode};
 use iroh::sync::store::{DownloadPolicy, Query, SortBy, SortDirection};
-use iroh::sync::{AuthorId, ContentStatus, PeerIdBytes};
+use iroh::sync::{AuthorId, ContentStatus};
 use iroh::ticket::DocTicket;
 use iroh_base::hash::BlobFormat;
 use lru::LruCache;
@@ -308,57 +308,29 @@ impl Table {
         Ok(None)
     }
 
-    async fn download_entry_from_peers(&self, entry: &Entry, peers: &[PeerIdBytes]) -> Result<()> {
+    async fn download_entry_from_peers(&self, entry: &Entry, nodes: Vec<NodeAddr>) -> Result<()> {
         let key = std::str::from_utf8(entry.key()).map_err(Error::incorrect_key)?;
-        for peer in peers {
-            match PublicKey::from_bytes(peer) {
-                Ok(public_key) => {
-                    let progress = match self
-                        .node
-                        .blobs
-                        .download(BlobDownloadRequest {
-                            hash: entry.content_hash(),
-                            format: BlobFormat::Raw,
-                            peer: NodeAddr::new(public_key),
-                            tag: SetTagOption::Auto,
-                        })
-                        .await
-                        .map_err(Error::io_error)
-                    {
-                        Ok(progress) => progress,
-                        Err(error) => {
-                            warn!(error = ?error);
-                            continue;
-                        }
-                    };
-                    match progress.finish().await {
-                        Ok(import_result) => {
-                            info!(
-                                "found local_size {}, downloaded_size {}, content_len {}",
-                                import_result.local_size,
-                                import_result.downloaded_size,
-                                entry.content_len()
-                            );
-                            if import_result.local_size + import_result.downloaded_size
-                                == entry.content_len()
-                            {
-                                self.process_remote_entry(key, entry).await?;
-                                return Ok(());
-                            }
-                        }
-                        Err(error) => {
-                            warn!(error = ?error);
-                            continue;
-                        }
-                    }
-                }
-                Err(_signing_error) => {
-                    warn!("potential db corruption: peers per doc can't be decoded");
-                    continue;
-                }
-            };
-        }
-        Err(Error::failed_download(key))
+        let progress = self
+            .node
+            .blobs
+            .download(BlobDownloadRequest {
+                hash: entry.content_hash(),
+                format: BlobFormat::Raw,
+                nodes: nodes.to_vec(),
+                tag: SetTagOption::Auto,
+                mode: DownloadMode::Queued,
+            })
+            .await
+            .map_err(Error::io_error)?;
+        let import_result = progress.finish().await.map_err(Error::failed_download)?;
+        info!(
+            "found local_size {}, downloaded_size {}, content_len {}",
+            import_result.local_size,
+            import_result.downloaded_size,
+            entry.content_len()
+        );
+        self.process_remote_entry(key, entry).await?;
+        Ok(())
     }
 
     pub async fn download_missing(
@@ -369,6 +341,10 @@ impl Table {
         let Ok(Some(peers)) = self.iroh_doc.get_sync_peers().await else {
             return Ok(());
         };
+        let nodes: Vec<_> = peers
+            .iter()
+            .filter_map(|peer| PublicKey::from_bytes(peer).map(NodeAddr::from).ok())
+            .collect();
         let download_policy =
             download_policy.unwrap_or_else(|| self.table_config.download_policy.clone());
         let all_entries: Vec<_> = self
@@ -395,19 +371,18 @@ impl Table {
                 }
             } {
                 let storage0 = self.clone();
-                let mut peers0 = peers.clone();
-                peers0.shuffle(&mut thread_rng());
+                let mut nodes0 = nodes.clone();
+                nodes0.shuffle(&mut thread_rng());
                 let join_handle = pool
                     .spawn(async move {
-                        if let Err(error) =
-                            storage0.download_entry_from_peers(&entry, &peers0).await
+                        if let Err(error) = storage0.download_entry_from_peers(&entry, nodes0).await
                         {
                             warn!(error = ?error);
                         }
                     })
                     .await
                     .map_err(Error::io_error)?;
-                let _ = self.task_tracker.track_future(join_handle);
+                tokio::spawn(self.task_tracker.track_future(join_handle));
             }
         }
         Ok(())
@@ -468,24 +443,33 @@ impl Table {
             .await
             .map_err(Error::entry)?;
         if let Some(entry) = entry {
-            if let Ok(Some(db_entry)) = self.node.db().get(&entry.content_hash()).await {
-                if !db_entry.is_complete() {
-                    if let Ok(Some(mut peers)) = self.iroh_doc.get_sync_peers().await {
-                        peers.shuffle(&mut thread_rng());
-                        self.download_entry_from_peers(&entry, &peers).await?;
-                    }
+            let is_complete = self
+                .node
+                .db()
+                .get(&entry.content_hash())
+                .await
+                .unwrap_or_default()
+                .map_or(false, |db_entry| db_entry.is_complete());
+            if !is_complete {
+                if let Ok(Some(mut peers)) = self.iroh_doc.get_sync_peers().await {
+                    peers.shuffle(&mut thread_rng());
+                    let nodes = peers
+                        .iter()
+                        .filter_map(|peer| PublicKey::from_bytes(peer).map(NodeAddr::from).ok())
+                        .collect();
+                    self.download_entry_from_peers(&entry, nodes).await?;
                 }
-                return Ok(Some((
-                    Box::new(
-                        entry
-                            .content_reader(self.node.client())
-                            .await
-                            .map_err(Error::storage)?,
-                    ),
-                    entry.content_len(),
-                    entry.content_hash(),
-                )));
             }
+            return Ok(Some((
+                Box::new(
+                    entry
+                        .content_reader(self.node.client())
+                        .await
+                        .map_err(Error::storage)?,
+                ),
+                entry.content_len(),
+                entry.content_hash(),
+            )));
         }
         Ok(None)
     }

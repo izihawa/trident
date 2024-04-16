@@ -90,35 +90,49 @@ impl IrohNode {
 
         let mut tables = HashMap::new();
         let storage_configs = config_lock.iroh.storages.clone();
+        let mut init_futures = vec![];
         for (table_name, table_config) in &mut config_lock.iroh.tables {
-            let iroh_doc = node
-                .client()
-                .docs
-                .open(NamespaceId::from_str(&table_config.id).map_err(Error::storage)?)
-                .await
-                .map_err(Error::table)?
-                .ok_or_else(|| Error::table(format!("{} does not exist", table_config.id)))?;
-            iroh_doc
-                .set_download_policy(table_config.download_policy.clone())
-                .await
-                .map_err(Error::doc)?;
+            let table_name = table_name.clone();
+            let table_config = table_config.clone();
+            let storage_config = table_config
+                .storage_name
+                .as_ref()
+                .map(|s| storage_configs[s].clone());
+            let task_tracker = task_tracker.clone();
+            let cancellation_token = cancellation_token.clone();
+            let node = node.clone();
+            let init_future = tokio::spawn(async move {
+                let iroh_doc = node
+                    .client()
+                    .docs
+                    .open(NamespaceId::from_str(&table_config.id).map_err(Error::storage)?)
+                    .await
+                    .map_err(Error::table)?
+                    .ok_or_else(|| Error::table(format!("{} does not exist", table_config.id)))?;
+                iroh_doc
+                    .set_download_policy(table_config.download_policy.clone())
+                    .await
+                    .map_err(Error::doc)?;
 
-            iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
-            let table = Table::new(
-                table_name,
-                author_id,
-                node.clone(),
-                iroh_doc.clone(),
-                table_config
-                    .storage_name
-                    .as_ref()
-                    .map(|s| storage_configs[s].clone()),
-                table_config.clone(),
-                cancellation_token.clone(),
-                task_tracker.clone(),
-            )
-            .await?;
-            tables.insert(table_name.clone(), table);
+                iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
+                let table = Table::new(
+                    &table_name,
+                    author_id,
+                    node.clone(),
+                    iroh_doc.clone(),
+                    storage_config,
+                    table_config.clone(),
+                    cancellation_token.clone(),
+                    task_tracker.clone(),
+                )
+                .await?;
+                Ok((table_name.clone(), table))
+            });
+            init_futures.push(init_future);
+        }
+        for init_future in init_futures {
+            let (table_name, table) = init_future.await.map_err(Error::node_create)??;
+            tables.insert(table_name, table);
         }
 
         let fs_storage_configs = config_lock.iroh.storages.clone();
@@ -131,8 +145,8 @@ impl IrohNode {
             author_id,
             config,
             fs_storage_configs,
-            cancellation_token: cancellation_token.clone(),
-            task_tracker: task_tracker.clone(),
+            cancellation_token,
+            task_tracker,
         };
 
         Ok(iroh_node)
