@@ -1751,7 +1751,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -1789,7 +1789,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "aead",
  "anyhow",
@@ -1829,7 +1829,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -1869,7 +1869,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1921,7 +1921,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -1941,7 +1941,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "aead",
  "anyhow",
@@ -2010,7 +2010,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#da0ea4d2d2bc8cbb9ef14eef40fd7301a1c14cba"
+source = "git+https://github.com/izihawa/iroh?branch=main#463689c636cd3f85128c28725bd58fc750e0ab7a"
 dependencies = [
  "anyhow",
  "bytes",
