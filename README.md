@@ -43,7 +43,7 @@ docker run -it -p 7080:80 -v $(pwd)/trident:/trident izihawa/trident:latest serv
 
 ```bash
 curl -H "Content-Type: application/json" -X POST "http://127.0.0.1:7080/tables/document/import/" \
---data '{"ticket": "<doc_ticket>", "storage": "default", "download_policy": {"EverythingExcept": []}}'
+--data '{"ticket": "<table_ticket>", "storage": "default", "download_policy": {"EverythingExcept": []}}'
 ```
 
 ### Force Syncing
