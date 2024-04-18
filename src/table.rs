@@ -15,7 +15,7 @@ use iroh::net::NodeAddr;
 use iroh::node::Node;
 use iroh::rpc_protocol::{BlobDownloadRequest, DownloadMode, SetTagOption, ShareMode};
 use iroh::sync::store::{DownloadPolicy, Query, SortBy, SortDirection};
-use iroh::sync::{AuthorId, ContentStatus};
+use iroh::sync::{AuthorId, Capability, ContentStatus};
 use iroh::ticket::DocTicket;
 use iroh_base::hash::BlobFormat;
 use lru::LruCache;
@@ -482,8 +482,49 @@ impl Table {
             }
         }
     }
-    pub async fn share(&self, mode: ShareMode) -> Result<DocTicket> {
-        self.iroh_doc().share(mode).await.map_err(Error::storage)
+    pub async fn share(&self, mode: ShareMode, peers: Option<Vec<NodeAddr>>) -> Result<DocTicket> {
+        let capability = match mode {
+            ShareMode::Read => Capability::Read(self.iroh_doc.id()),
+            ShareMode::Write => {
+                let secret = self
+                    .node
+                    .sync_handle()
+                    .export_secret_key(self.iroh_doc.id())
+                    .await
+                    .map_err(Error::missing_key)?;
+                Capability::Write(secret)
+            }
+        };
+        match peers {
+            None => {
+                let me = self.node.my_addr().await.map_err(Error::io_error)?;
+                Ok(DocTicket {
+                    capability,
+                    nodes: vec![me],
+                })
+            }
+            Some(peers) => Ok(DocTicket {
+                capability,
+                nodes: peers,
+            }),
+        }
+    }
+
+    pub async fn peers(&self) -> Result<Option<Vec<NodeAddr>>> {
+        let peers = self
+            .iroh_doc()
+            .get_sync_peers()
+            .await
+            .map_err(Error::io_error)?;
+        let Some(peers) = peers else {
+            return Ok(None);
+        };
+        Ok(Some(
+            peers
+                .iter()
+                .filter_map(|peer| PublicKey::from_bytes(peer).map(NodeAddr::from).ok())
+                .collect(),
+        ))
     }
 
     pub async fn get_hash(&self, key: &str) -> Result<Option<(Hash, u64)>> {

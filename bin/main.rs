@@ -9,8 +9,11 @@ use axum::{
 };
 use clap::{Parser, Subcommand};
 use futures::TryStreamExt;
+use iroh::rpc_protocol::ShareMode;
 use iroh::sync::store::DownloadPolicy;
 use iroh_base::hash::Hash;
+use iroh_base::key::PublicKey;
+use iroh_base::node_addr::NodeAddr;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -77,14 +80,16 @@ struct TablesSyncRequest {
 }
 
 #[derive(Deserialize)]
-struct TablesInsertRequest {}
-
-#[derive(Deserialize)]
 struct TablesForeignInsertRequest {
     from_table: String,
     from_key: String,
     to_table: String,
     to_key: String,
+}
+
+#[derive(Deserialize)]
+struct TableShareRequest {
+    peers: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -93,9 +98,15 @@ struct AppState {
     config: Arc<RwLock<Config>>,
     config_path: PathBuf,
 }
+
 #[derive(Serialize)]
 struct TablesExistsResponse {
     pub exists: bool,
+}
+
+#[derive(Serialize)]
+struct TablesPeersResponse {
+    pub peers: Option<Vec<NodeAddr>>,
 }
 
 #[derive(Serialize)]
@@ -140,11 +151,12 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/", get(tables_ls))
                 .route("/tables/:table/", post(tables_create))
                 .route("/tables/:table/exists/", get(tables_exists))
+                .route("/tables/:table/peers/", get(tables_peers))
                 .route("/tables/:table/", delete(tables_drop))
                 .route("/tables/:table/import/", post(tables_import))
                 .route("/tables/:table/sync/", post(tables_sync))
                 .route("/tables/:table/", get(table_ls))
-                .route("/tables/:table/share/", get(table_share))
+                .route("/tables/:table/share/:mode/", post(table_share))
                 .route("/tables/:table/*key", get(table_get))
                 .route("/tables/:table/*key", put(table_insert))
                 .route("/tables/:table/*key", delete(table_delete))
@@ -306,6 +318,16 @@ async fn tables_exists(State(state): State<AppState>, Path(table): Path<String>)
     .into_response()
 }
 
+async fn tables_peers(State(state): State<AppState>, Path(table): Path<String>) -> Response {
+    match state.iroh_node.read().await.tables_peers(&table).await {
+        Ok(peers) => Json(TablesPeersResponse {
+            peers,
+        })
+        .into_response(),
+        Err(error) => error.into_response(),
+    }
+}
+
 async fn tables_import(
     State(state): State<AppState>,
     Path(table): Path<String>,
@@ -389,8 +411,25 @@ async fn tables_drop(State(state): State<AppState>, Path(table): Path<String>) -
     }
 }
 
-async fn table_share(State(state): State<AppState>, Path(table): Path<String>) -> Response {
-    match state.iroh_node.read().await.table_share(&table).await {
+async fn table_share(
+    State(state): State<AppState>,
+    Path((table, mode)): Path<(String, ShareMode)>,
+    table_share_request: Option<Json<TableShareRequest>>,
+) -> Response {
+    let peers = table_share_request.map(|Json(table_share_request)| {
+        table_share_request
+            .peers
+            .iter()
+            .filter_map(|peer| PublicKey::from_str(peer).map(NodeAddr::from).ok())
+            .collect()
+    });
+    match state
+        .iroh_node
+        .read()
+        .await
+        .table_share(&table, mode, peers)
+        .await
+    {
         Ok(ticket) => Response::builder()
             .body(Body::from(ticket.to_string()))
             .unwrap(),

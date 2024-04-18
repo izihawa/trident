@@ -10,6 +10,7 @@ use iroh::rpc_protocol::ShareMode;
 use iroh::sync::store::DownloadPolicy;
 use iroh::sync::{AuthorId, NamespaceId};
 use iroh::ticket::DocTicket;
+use iroh_base::node_addr::NodeAddr;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -201,7 +202,14 @@ impl IrohNode {
     }
 
     pub async fn tables_exists(&self, table_name: &str) -> bool {
-        return self.tables.get(table_name).is_some();
+        self.tables.get(table_name).is_some()
+    }
+
+    pub async fn tables_peers(&self, table_name: &str) -> Result<Option<Vec<NodeAddr>>> {
+        match self.tables.get(table_name) {
+            None => Err(Error::missing_table(table_name)),
+            Some(table) => table.peers().await,
+        }
     }
 
     pub async fn tables_import(
@@ -333,9 +341,14 @@ impl IrohNode {
         Ok(from_hash)
     }
 
-    pub async fn table_share(&self, table_name: &str) -> Result<DocTicket> {
+    pub async fn table_share(
+        &self,
+        table_name: &str,
+        mode: ShareMode,
+        peers: Option<Vec<NodeAddr>>,
+    ) -> Result<DocTicket> {
         match self.tables.get(table_name) {
-            Some(table) => Ok(table.share(ShareMode::Read).await?),
+            Some(table) => Ok(table.share(mode, peers).await?),
             None => Err(Error::missing_table(table_name)),
         }
     }

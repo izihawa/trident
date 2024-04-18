@@ -91,9 +91,9 @@ class TridentClient(BaseClient):
         response = await self.put(url, data=value)
         return response.headers['X-Iroh-Hash']
 
-    async def table_share(self, table: str) -> dict:
-        url = f"/tables/{table}/share/"
-        response = await self.get(url)
+    async def table_share(self, table: str, mode: str = 'read') -> dict:
+        url = f"/tables/{table}/share/{mode}/"
+        response = await self.post(url)
         return await response.json()
 
     async def table_delete(self, table: str, key: str):
