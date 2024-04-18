@@ -5,6 +5,8 @@ use async_stream::stream;
 use futures::StreamExt;
 use iroh::bytes::store::fs::Store;
 use iroh::bytes::Hash;
+use iroh::net::defaults::DEFAULT_RELAY_STUN_PORT;
+use iroh::net::relay::{RelayMap, RelayMode, RelayNode};
 use iroh::node::{GcPolicy, Node};
 use iroh::rpc_protocol::ShareMode;
 use iroh::sync::store::DownloadPolicy;
@@ -23,6 +25,7 @@ use tokio_stream::Stream;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::info;
+use url::Url;
 
 pub struct IrohNode {
     tables: HashMap<String, Table>,
@@ -51,9 +54,25 @@ impl IrohNode {
             .await
             .map_err(Error::node_create)?;
 
+        let relay_mode = match &config_lock.iroh.relays {
+            None => RelayMode::Default,
+            Some(relays) => RelayMode::Custom(
+                RelayMap::from_nodes(relays.iter().map(|r| {
+                    let url: Url = r.parse().expect("default url");
+                    RelayNode {
+                        url: url.into(),
+                        stun_only: false,
+                        stun_port: DEFAULT_RELAY_STUN_PORT,
+                    }
+                }))
+                .expect("relay config error"),
+            ),
+        };
+
         let mut node_builder = Node::persistent(&config_lock.iroh.path)
             .await
             .map_err(Error::node_create)?
+            .relay_mode(relay_mode)
             .bind_port(config_lock.iroh.bind_port);
 
         if let Some(gc_interval_secs) = config_lock.iroh.gc_interval_secs {
@@ -224,9 +243,15 @@ impl IrohNode {
         match self.tables.entry(table_name.to_string()) {
             Entry::Occupied(entry) => {
                 let iroh_doc = entry.get().iroh_doc();
-                if iroh_doc.id() != ticket.capability.id() {
-                    return Err(Error::existing_table(table_name));
+                if ticket.capability.id() != iroh_doc.id() {
+                    return Err(Error::existing_table("different document in table"));
                 }
+                self.node
+                    .client()
+                    .docs
+                    .import(ticket)
+                    .await
+                    .map_err(Error::table)?;
                 iroh_doc.start_sync(nodes).await.map_err(Error::doc)?;
                 Ok(entry.get().iroh_doc().id())
             }
@@ -345,10 +370,9 @@ impl IrohNode {
         &self,
         table_name: &str,
         mode: ShareMode,
-        peers: Option<Vec<NodeAddr>>,
     ) -> Result<DocTicket> {
         match self.tables.get(table_name) {
-            Some(table) => Ok(table.share(mode, peers).await?),
+            Some(table) => Ok(table.share(mode).await?),
             None => Err(Error::missing_table(table_name)),
         }
     }

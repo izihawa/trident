@@ -482,7 +482,7 @@ impl Table {
             }
         }
     }
-    pub async fn share(&self, mode: ShareMode, peers: Option<Vec<NodeAddr>>) -> Result<DocTicket> {
+    pub async fn share(&self, mode: ShareMode) -> Result<DocTicket> {
         let capability = match mode {
             ShareMode::Read => Capability::Read(self.iroh_doc.id()),
             ShareMode::Write => {
@@ -495,19 +495,11 @@ impl Table {
                 Capability::Write(secret)
             }
         };
-        match peers {
-            None => {
-                let me = self.node.my_addr().await.map_err(Error::io_error)?;
-                Ok(DocTicket {
-                    capability,
-                    nodes: vec![me],
-                })
-            }
-            Some(peers) => Ok(DocTicket {
-                capability,
-                nodes: peers,
-            }),
-        }
+        let me = self.node.my_addr().await.map_err(Error::io_error)?;
+        Ok(DocTicket {
+            capability,
+            nodes: vec![NodeAddr::from(me.node_id)],
+        })
     }
 
     pub async fn peers(&self) -> Result<Option<Vec<NodeAddr>>> {

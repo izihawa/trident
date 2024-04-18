@@ -38,3 +38,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3"
 lru = "0.12"
 tokio-task-pool = "0.1"
+url = "2.5.0"

@@ -73,6 +73,7 @@ pub struct IrohConfig {
     #[serde(default = "HashMap::new")]
     pub storages: HashMap<String, StorageEngineConfig>,
     pub gc_interval_secs: Option<u64>,
+    pub relays: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -104,6 +105,7 @@ impl Config {
                     },
                 )]),
                 gc_interval_secs: None,
+                relays: None,
             },
         }
     }
