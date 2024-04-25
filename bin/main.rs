@@ -150,7 +150,7 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/import/", post(tables_import))
                 .route("/tables/:table/sync/", post(tables_sync))
                 .route("/tables/:table/", get(table_ls))
-                .route("/tables/:table/share/:mode/", post(table_share))
+                .route("/tables/:table/share/:mode/", get(table_share))
                 .route("/tables/:table/*key", get(table_get))
                 .route("/tables/:table/*key", put(table_insert))
                 .route("/tables/:table/*key", delete(table_delete))
