@@ -1,8 +1,12 @@
+import json
+import os
 import typing
 from typing import AsyncGenerator
 
+import aiofiles
 from aiobaseclient import BaseClient
 from aiobaseclient.exceptions import ExternalServiceError
+from izihawa_utils.common import filter_none
 
 
 class TridentClient(BaseClient):
@@ -36,9 +40,16 @@ class TridentClient(BaseClient):
         response = await self.get(f"/tables/")
         return await response.json()
 
-    async def tables_create(self, table: str, storage: str) -> bytes:
+    async def tables_create(self, table: str, storage: str | None = None) -> bytes:
         url = f"/tables/{table}/"
-        response = await self.post(url, params={'storage': storage})
+        params = {}
+        if storage:
+            params['storage'] = storage
+        response = await self.post(
+            url,
+            headers={'Content-Type': 'application/json'},
+            data=json.dumps(filter_none(params)),
+        )
         return await response.read()
 
     async def tables_exists(self, table: str) -> bool:
@@ -141,3 +152,40 @@ class TridentClient(BaseClient):
                 'iroh_hash': response.headers['X-Iroh-Hash'],
                 'size': int(response.headers['Content-Length']),
             }
+
+    async def table_upload(self, table: str, directory: str):
+        full_path = os.path.abspath(directory)
+        for root, subdirs, files in os.walk(full_path):
+            for file_path in files:
+                async with aiofiles.open(root + '/' + file_path, mode='rb') as file:
+                    rel_path = os.path.relpath(root + '/' + file_path, full_path)
+                    await self.table_insert(table, rel_path, await file.read())
+
+    async def table_copy_files(self, source_path: str, target_path: str):
+        source_table, source_path = (source_path.rstrip('/') + '/').split('/', 1)
+        target_table, target_path = (target_path.rstrip('/') + '/').split('/', 1)
+        async for element in self.table_ls(source_table):
+            if element.startswith(source_path):
+                remaining_path = os.path.join(target_path, element.removeprefix(source_path).lstrip('/'))
+                await self.table_foreign_insert(
+                    source_table,
+                    element,
+                    target_table,
+                    remaining_path,
+                )
+
+    async def _tables_ls_get_cli(self, table: str):
+        elements = []
+        async for line in self.table_ls(table):
+            elements.append(line.strip())
+        return elements
+
+    def get_interface(self):
+        return {
+            'table-copy-files': self.table_copy_files,
+            'table-get': self.table_get,
+            'table-ls': self._tables_ls_get_cli,
+            'table-upload': self.table_upload,
+            'tables-create': self.tables_create,
+            'tables-drop': self.tables_drop,
+        }
