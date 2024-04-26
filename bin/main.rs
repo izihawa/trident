@@ -267,14 +267,20 @@ async fn blobs_get(
     match state.iroh_node.read().await.blobs_get(hash).await {
         Ok(Some((reader, file_size))) => match method {
             Method::HEAD => Response::builder()
-                .header("Content-Length", file_size)
-                .header("Content-Type", mime_guess::mime::OCTET_STREAM.to_string())
+                .header(header::CONTENT_LENGTH, file_size)
+                .header(
+                    header::CONTENT_TYPE,
+                    mime_guess::mime::OCTET_STREAM.to_string(),
+                )
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::default())
                 .unwrap(),
             Method::GET => Response::builder()
-                .header("Content-Length", file_size)
-                .header("Content-Type", mime_guess::mime::OCTET_STREAM.to_string())
+                .header(header::CONTENT_LENGTH, file_size)
+                .header(
+                    header::CONTENT_TYPE,
+                    mime_guess::mime::OCTET_STREAM.to_string(),
+                )
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::from_stream(ReaderStream::new(reader)))
                 .unwrap(),
@@ -575,7 +581,6 @@ async fn table_get(
             let builder = Response::builder()
                 .status(status_code)
                 .header(header::ACCEPT_RANGES, "bytes")
-                .header(header::CACHE_CONTROL, "public,max-age=31536000,immutable")
                 .header(
                     header::CONTENT_TYPE,
                     mime_guess::from_ext(&key)
