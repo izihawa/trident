@@ -558,6 +558,7 @@ async fn table_get(
             };
             let offset = start.unwrap_or(0);
             let length = end.map(|end| end - offset);
+            let definite_length = length.unwrap_or(entry.content_len() - offset);
             (
                 iroh_node
                     .client()
@@ -568,7 +569,7 @@ async fn table_get(
                 response_builder
                     .status(StatusCode::PARTIAL_CONTENT)
                     .header(header::ACCEPT_RANGES, "bytes")
-                    .header(header::CONTENT_LENGTH, length.unwrap_or(entry.content_len() - offset))
+                    .header(header::CONTENT_LENGTH, definite_length)
                     .header(
                         header::CONTENT_RANGE,
                         format_content_range(start, end.map(|end| end - 1), entry.content_len()),
@@ -632,7 +633,7 @@ fn format_content_range(start: Option<u64>, end: Option<u64>, size: u64) -> Stri
         "bytes {}-{}/{}",
         start.map(|x| x.to_string()).unwrap_or_default(),
         end.map(|x| x.to_string())
-            .unwrap_or_else(|| size.to_string()),
+            .unwrap_or_else(|| (size - 1).to_string()),
         size
     )
 }
