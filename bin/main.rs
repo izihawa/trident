@@ -24,8 +24,8 @@ use tokio::sync::RwLock;
 use tokio_util::io::{ReaderStream, StreamReader};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use tower_http::trace::{self, TraceLayer};
 use tower_http::cors::CorsLayer;
+use tower_http::trace::{self, TraceLayer};
 use tracing::{info, info_span, Instrument, Level};
 use tracing_subscriber::EnvFilter;
 use trident_storage::config::{Config, TableConfig};
@@ -505,13 +505,23 @@ async fn table_get(
         Ok(Some((reader, file_size, hash))) => match method {
             Method::HEAD => Response::builder()
                 .header("Content-Length", file_size)
-                .header("Content-Type", mime_guess::from_ext(&key).first_or_octet_stream().to_string())
+                .header(
+                    "Content-Type",
+                    mime_guess::from_ext(&key)
+                        .first_or_octet_stream()
+                        .to_string(),
+                )
                 .header("X-Iroh-Hash", hash.to_string())
                 .body(Body::default())
                 .unwrap(),
             Method::GET => Response::builder()
                 .header("Content-Length", file_size)
-                .header("Content-Type", mime_guess::from_ext(&key).first_or_octet_stream().to_string())
+                .header(
+                    "Content-Type",
+                    mime_guess::from_ext(&key)
+                        .first_or_octet_stream()
+                        .to_string(),
+                )
                 .header("X-Iroh-Hash", hash.to_string())
                 .body(Body::from_stream(ReaderStream::new(reader)))
                 .unwrap(),

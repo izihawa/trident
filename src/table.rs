@@ -443,13 +443,13 @@ impl Table {
             .await
             .map_err(Error::entry)?;
         if let Some(entry) = entry {
-            let is_complete = self
+            let db_entry = self
                 .node
                 .db()
                 .get(&entry.content_hash())
                 .await
-                .unwrap_or_default()
-                .map_or(false, |db_entry| db_entry.is_complete());
+                .unwrap_or_default();
+            let is_complete = db_entry.map_or(false, |db_entry| db_entry.is_complete());
             if !is_complete {
                 if let Ok(Some(mut peers)) = self.iroh_doc.get_sync_peers().await {
                     peers.shuffle(&mut thread_rng());
