@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::{Query, Request};
+use axum::extract::{Host, Query, Request};
 use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
@@ -140,7 +140,7 @@ async fn app() -> Result<(), Error> {
             let config = state.config.clone();
 
             // build our application with a route
-            let app = Router::new()
+            let mut router = Router::new()
                 .route("/blobs/:hash", get(blobs_get))
                 .route("/tables/", get(tables_ls))
                 .route("/tables/:table/", post(tables_create))
@@ -154,7 +154,13 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/*key", get(table_get))
                 .route("/tables/:table/*key", put(table_insert))
                 .route("/tables/:table/*key", delete(table_delete))
-                .route("/tables/foreign_insert/", post(table_foreign_insert))
+                .route("/tables/foreign_insert/", post(table_foreign_insert));
+
+            if config.read().await.http.hostname.is_some() {
+                router = router.route("/:table/*key", get(table_root_get));
+            }
+
+            let app = router
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(trace::DefaultMakeSpan::new().level(Level::INFO))
@@ -406,13 +412,7 @@ async fn table_share(
     State(state): State<AppState>,
     Path((table, mode)): Path<(String, ShareMode)>,
 ) -> Response {
-    match state
-        .iroh_node
-        .read()
-        .await
-        .table_share(&table, mode)
-        .await
-    {
+    match state.iroh_node.read().await.table_share(&table, mode).await {
         Ok(ticket) => Response::builder()
             .body(Body::from(ticket.to_string()))
             .unwrap(),
@@ -465,6 +465,31 @@ async fn table_foreign_insert(
             .unwrap(),
         Err(e) => e.into_response(),
     }
+}
+
+async fn table_root_get(
+    State(state): State<AppState>,
+    method: Method,
+    Host(subdomain): Host,
+    Path(key): Path<String>,
+) -> Response {
+    let Some(config_hostname) = state.config.read().await.http.hostname.clone() else {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::default())
+            .unwrap();
+    };
+
+    let table = match subdomain.strip_suffix(&format!(".{}", config_hostname)) {
+        None => {
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::default())
+                .unwrap()
+        }
+        Some(table) => table,
+    };
+    table_get(State(state), method, Path((table.to_string(), key))).await
 }
 
 async fn table_get(

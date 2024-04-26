@@ -366,11 +366,7 @@ impl IrohNode {
         Ok(from_hash)
     }
 
-    pub async fn table_share(
-        &self,
-        table_name: &str,
-        mode: ShareMode,
-    ) -> Result<DocTicket> {
+    pub async fn table_share(&self, table_name: &str, mode: ShareMode) -> Result<DocTicket> {
         match self.tables.get(table_name) {
             Some(table) => Ok(table.share(mode).await?),
             None => Err(Error::missing_table(table_name)),

@@ -29,20 +29,6 @@ pub struct S3ConfigCredentials {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct S3Config {
-    pub credentials: Option<S3ConfigCredentials>,
-    pub bucket_name: String,
-    pub prefix: String,
-    pub region_name: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct IpfsConfig {
-    pub api_base_url: String,
-    pub in_place: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TableConfig {
     pub id: String,
     #[serde(default = "DownloadPolicy::default")]
@@ -52,6 +38,7 @@ pub struct TableConfig {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HttpConfig {
+    pub hostname: Option<String>,
     pub endpoint: String,
 }
 
@@ -59,6 +46,7 @@ impl Default for HttpConfig {
     fn default() -> Self {
         HttpConfig {
             endpoint: "0.0.0.0:80".to_string(),
+            hostname: None,
         }
     }
 }
