@@ -25,6 +25,7 @@ use tokio_util::io::{ReaderStream, StreamReader};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tower_http::trace::{self, TraceLayer};
+use tower_http::cors::CorsLayer;
 use tracing::{info, info_span, Instrument, Level};
 use tracing_subscriber::EnvFilter;
 use trident_storage::config::{Config, TableConfig};
@@ -166,6 +167,7 @@ async fn app() -> Result<(), Error> {
                         .make_span_with(trace::DefaultMakeSpan::new().level(Level::INFO))
                         .on_response(trace::DefaultOnResponse::new().level(Level::INFO)),
                 )
+                .layer(CorsLayer::permissive())
                 .with_state(state);
 
             // run our app with hyper, listening globally on port 3000
@@ -263,11 +265,13 @@ async fn blobs_get(
         Ok(Some((reader, file_size))) => match method {
             Method::HEAD => Response::builder()
                 .header("Content-Length", file_size)
+                .header("Content-Type", mime_guess::mime::OCTET_STREAM.to_string())
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::default())
                 .unwrap(),
             Method::GET => Response::builder()
                 .header("Content-Length", file_size)
+                .header("Content-Type", mime_guess::mime::OCTET_STREAM.to_string())
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::from_stream(ReaderStream::new(reader)))
                 .unwrap(),
@@ -501,11 +505,13 @@ async fn table_get(
         Ok(Some((reader, file_size, hash))) => match method {
             Method::HEAD => Response::builder()
                 .header("Content-Length", file_size)
+                .header("Content-Type", mime_guess::from_ext(&key).first_or_octet_stream().to_string())
                 .header("X-Iroh-Hash", hash.to_string())
                 .body(Body::default())
                 .unwrap(),
             Method::GET => Response::builder()
                 .header("Content-Length", file_size)
+                .header("Content-Type", mime_guess::from_ext(&key).first_or_octet_stream().to_string())
                 .header("X-Iroh-Hash", hash.to_string())
                 .body(Body::from_stream(ReaderStream::new(reader)))
                 .unwrap(),
