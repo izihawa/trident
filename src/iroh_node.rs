@@ -2,8 +2,6 @@ use crate::config::{Config, StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
 use crate::table::Table;
 use async_stream::stream;
-use bytes::Bytes;
-use flume::Receiver;
 use futures::StreamExt;
 use iroh::bytes::store::fs::Store;
 use iroh::bytes::Hash;
@@ -15,11 +13,9 @@ use iroh::sync::store::DownloadPolicy;
 use iroh::sync::{AuthorId, NamespaceId};
 use iroh::ticket::DocTicket;
 use iroh_base::node_addr::NodeAddr;
-use iroh_bytes::get::fsm::DecodeError;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::result;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -90,7 +86,7 @@ impl IrohNode {
             .docs
             .list()
             .await
-            .unwrap()
+            .map_err(Error::io_error)?
             .map(|x| x.unwrap().0)
             .collect::<Vec<_>>()
             .await
@@ -174,6 +170,10 @@ impl IrohNode {
         };
 
         Ok(iroh_node)
+    }
+
+    pub fn client(&self) -> &iroh::client::mem::Iroh {
+        self.node.client()
     }
 
     pub async fn tables_ls(&self) -> HashMap<String, TableConfig> {
@@ -381,25 +381,12 @@ impl IrohNode {
         &self,
         table_name: &str,
         key: &str,
-    ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64, Hash)>> {
+    ) -> Result<Option<iroh::client::Entry>> {
         let table = self
             .tables
             .get(table_name)
             .ok_or_else(|| Error::missing_table(table_name))?;
         table.get(key).await
-    }
-
-    pub async fn table_get_partial(
-        &self,
-        table_name: &str,
-        key: &str,
-        byte_range: (Option<u64>, Option<u64>),
-    ) -> Result<(Receiver<result::Result<Bytes, DecodeError>>, u64, bool)> {
-        let table = self
-            .tables
-            .get(table_name)
-            .ok_or_else(|| Error::missing_table(table_name))?;
-        table.get_partial(key, byte_range).await
     }
 
     pub async fn table_delete(&self, table_name: &str, key: &str) -> Result<usize> {

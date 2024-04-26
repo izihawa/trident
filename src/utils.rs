@@ -1,5 +1,4 @@
 use percent_encoding::{AsciiSet, CONTROLS};
-use tokio_util::bytes;
 
 pub const FRAGMENT: &AsciiSet = &CONTROLS
     .add(b' ')

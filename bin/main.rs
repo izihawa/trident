@@ -9,7 +9,7 @@ use axum::{
 };
 use clap::{Parser, Subcommand};
 use futures::TryStreamExt;
-use headers::{HeaderMap, HeaderMapExt};
+use headers::{HeaderMap, HeaderMapExt, Range};
 use hyper::header;
 use iroh::rpc_protocol::ShareMode;
 use iroh::sync::store::DownloadPolicy;
@@ -511,15 +511,16 @@ async fn table_root_get(
     )
     .await
 }
-
-async fn table_get_entire(
+async fn table_get(
     State(state): State<AppState>,
     method: Method,
+    headers: HeaderMap,
     Path((table, key)): Path<(String, String)>,
 ) -> Response {
-    let iroh_node = state.iroh_node.read().await.table_get(&table, &key).await;
-    let (reader, file_size, hash) = match iroh_node {
-        Ok(Some(iroh_node)) => iroh_node,
+    let iroh_node = state.iroh_node.read().await;
+    let entry = iroh_node.table_get(&table, &key).await;
+    let entry = match entry {
+        Ok(Some(entry)) => entry,
         Ok(None) => {
             return Response::builder()
                 .status(StatusCode::NOT_FOUND)
@@ -528,86 +529,73 @@ async fn table_get_entire(
         }
         Err(e) => return e.into_response(),
     };
+
+    let response_builder =
+        Response::builder().header("X-Iroh-Hash", entry.content_hash().to_string());
+
+    let (reader, response_builder) = match headers.typed_get::<Range>() {
+        None => (
+            iroh_node
+                .client()
+                .blobs
+                .read(entry.content_hash())
+                .await
+                .map_err(Error::blobs),
+            response_builder
+                .status(StatusCode::OK)
+                .header(header::CONTENT_LENGTH, entry.content_len())
+                .header(
+                    header::CONTENT_TYPE,
+                    mime_guess::from_path(&key)
+                        .first_or_octet_stream()
+                        .to_string(),
+                ),
+        ),
+        Some(range_value) => {
+            let (start, end) = match parse_byte_range(range_value).map_err(Error::blobs) {
+                Ok((start, end)) => (start, end),
+                Err(e) => return e.into_response(),
+            };
+            let offset = start.unwrap_or(0);
+            let length = end.map(|end| end - offset);
+            (
+                iroh_node
+                    .client()
+                    .blobs
+                    .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
+                    .await
+                    .map_err(Error::blobs),
+                response_builder
+                    .status(StatusCode::PARTIAL_CONTENT)
+                    .header(header::ACCEPT_RANGES, "bytes")
+                    .header(header::CONTENT_LENGTH, length.unwrap_or(entry.content_len() - offset))
+                    .header(
+                        header::CONTENT_RANGE,
+                        format_content_range(start, end.map(|end| end - 1), entry.content_len()),
+                    )
+                    .header(
+                        header::CONTENT_TYPE,
+                        if definite_length == entry.content_len() {
+                            mime_guess::from_path(&key)
+                                .first_or_octet_stream()
+                                .to_string()
+                        } else {
+                            mime_guess::mime::OCTET_STREAM.to_string()
+                        },
+                    ),
+            )
+        }
+    };
+    let reader = match reader {
+        Ok(reader) => reader,
+        Err(e) => return e.into_response(),
+    };
     match method {
-        Method::HEAD => Response::builder()
-            .header(header::CONTENT_LENGTH, file_size)
-            .header(
-                header::CONTENT_TYPE,
-                mime_guess::from_ext(&key)
-                    .first_or_octet_stream()
-                    .to_string(),
-            )
-            .header("X-Iroh-Hash", hash.to_string())
-            .body(Body::default())
-            .unwrap(),
-        Method::GET => Response::builder()
-            .header(header::CONTENT_LENGTH, file_size)
-            .header(
-                header::CONTENT_TYPE,
-                mime_guess::from_ext(&key)
-                    .first_or_octet_stream()
-                    .to_string(),
-            )
-            .header("X-Iroh-Hash", hash.to_string())
+        Method::HEAD => response_builder.body(Body::default()).unwrap(),
+        Method::GET => response_builder
             .body(Body::from_stream(ReaderStream::new(reader)))
             .unwrap(),
         _ => unreachable!(),
-    }
-}
-
-async fn table_get(
-    State(state): State<AppState>,
-    method: Method,
-    headers: HeaderMap,
-    Path((table, key)): Path<(String, String)>,
-) -> Response {
-    match headers.typed_get::<headers::Range>() {
-        None => table_get_entire(State(state), method, Path((table, key))).await,
-        Some(range_value) => {
-            let byte_range = parse_byte_range(range_value).unwrap();
-            let (recv, size, is_all) = state
-                .iroh_node
-                .read()
-                .await
-                .table_get_partial(&table, &key, byte_range)
-                .await
-                .unwrap();
-            let status_code = if is_all {
-                StatusCode::OK
-            } else {
-                StatusCode::PARTIAL_CONTENT
-            };
-            let body = Body::from_stream(recv.into_stream());
-            let builder = Response::builder()
-                .status(status_code)
-                .header(header::ACCEPT_RANGES, "bytes")
-                .header(
-                    header::CONTENT_TYPE,
-                    mime_guess::from_ext(&key)
-                        .first_or_octet_stream()
-                        .to_string(),
-                );
-            // content-length needs to be the actual repsonse size
-            let transfer_size = match byte_range {
-                (Some(start), Some(end)) => end - start,
-                (Some(start), None) => size - start,
-                (None, Some(end)) => end,
-                (None, None) => size,
-            };
-            let builder = builder.header(header::CONTENT_LENGTH, transfer_size);
-
-            let builder = if byte_range.0.is_some() || byte_range.1.is_some() {
-                builder
-                    .header(
-                        header::CONTENT_RANGE,
-                        format_content_range(byte_range.0, byte_range.1, size),
-                    )
-                    .status(StatusCode::PARTIAL_CONTENT)
-            } else {
-                builder
-            };
-            builder.body(body).unwrap()
-        }
     }
 }
 
@@ -643,7 +631,7 @@ fn format_content_range(start: Option<u64>, end: Option<u64>, size: u64) -> Stri
     format!(
         "bytes {}-{}/{}",
         start.map(|x| x.to_string()).unwrap_or_default(),
-        end.map(|x| (x + 1).to_string())
+        end.map(|x| x.to_string())
             .unwrap_or_else(|| size.to_string()),
         size
     )
