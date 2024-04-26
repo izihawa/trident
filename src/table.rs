@@ -2,10 +2,15 @@ use crate::config::{StorageEngineConfig, TableConfig};
 use crate::error::{Error, Result};
 use crate::file_shard::FileShard;
 use crate::hash_ring::HashRing;
+use crate::ranges::{slice, to_byte_range, to_chunk_range};
 use crate::utils::key_to_bytes;
 use crate::IrohDoc;
 use async_stream::stream;
+use bytes::Bytes;
 use futures::{Stream, StreamExt};
+use iroh::bytes::get::fsm::{BlobContentNext, ConnectedNext, DecodeError, EndBlobNext};
+use iroh::bytes::protocol::RangeSpecSeq;
+use iroh::bytes::store::bao_tree::io::BaoContentItem;
 use iroh::bytes::store::fs::Store;
 use iroh::bytes::store::{ExportMode, Map};
 use iroh::bytes::Hash;
@@ -24,6 +29,7 @@ use rand::thread_rng;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::result;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio_task_pool::Pool;
@@ -322,13 +328,7 @@ impl Table {
             })
             .await
             .map_err(Error::io_error)?;
-        let import_result = progress.finish().await.map_err(Error::failed_download)?;
-        info!(
-            "found local_size {}, downloaded_size {}, content_len {}",
-            import_result.local_size,
-            import_result.downloaded_size,
-            entry.content_len()
-        );
+        progress.finish().await.map_err(Error::failed_download)?;
         self.process_remote_entry(key, entry).await?;
         Ok(())
     }
@@ -472,6 +472,78 @@ impl Table {
             )));
         }
         Ok(None)
+    }
+
+    pub async fn get_partial(
+        &self,
+        key: &str,
+        range: (Option<u64>, Option<u64>),
+    ) -> Result<(
+        flume::Receiver<result::Result<Bytes, DecodeError>>,
+        u64,
+        bool,
+    )> {
+        let (hash, _) = self.get_hash(key).await.unwrap().unwrap();
+
+        let connection = self.get_default_connection().await.unwrap();
+
+        let byte_ranges = to_byte_range(range.0, range.1);
+        let is_all = byte_ranges.is_all();
+        let chunk_ranges = to_chunk_range(range.0, range.1);
+        let chunk_ranges = RangeSpecSeq::from_ranges(vec![chunk_ranges]);
+
+        let request = iroh::bytes::protocol::GetRequest::new(hash, chunk_ranges.clone());
+        let (send, recv) = flume::bounded::<result::Result<Bytes, DecodeError>>(2);
+
+        let req = iroh::bytes::get::fsm::start(connection.clone(), request);
+        let connected = req.next().await.unwrap();
+        let ConnectedNext::StartRoot(x) = connected.next().await.unwrap() else {
+            panic!("unexpected")
+        };
+        tracing::trace!("connected");
+        let (mut current, size) = x.next().next().await.unwrap();
+        tokio::spawn(async move {
+            let end = loop {
+                match current.next().await {
+                    BlobContentNext::More((next, Ok(item))) => {
+                        match item {
+                            BaoContentItem::Leaf(leaf) => {
+                                tracing::trace!("got leaf {} {}", leaf.offset, leaf.data.len());
+                                for item in slice(leaf.offset, leaf.data, byte_ranges.clone()) {
+                                    send.send_async(Ok(item)).await?;
+                                }
+                            }
+                            BaoContentItem::Parent(parent) => {
+                                tracing::trace!("got parent {:?}", parent);
+                            }
+                        }
+                        current = next;
+                    }
+                    BlobContentNext::More((_, Err(err))) => {
+                        send.send_async(Err(err)).await?;
+                        anyhow::bail!("error");
+                    }
+                    BlobContentNext::Done(end) => break end,
+                }
+            };
+            let EndBlobNext::Closing(at_closing) = end.next() else {
+                anyhow::bail!("unexpected response");
+            };
+            let _stats = at_closing.next().await?;
+            Ok(())
+        });
+        Ok((recv, size, is_all))
+    }
+
+    /// Get the mime type for a hash from the remote node.
+    async fn get_default_connection(&self) -> anyhow::Result<quinn::Connection> {
+        self.node
+            .magic_endpoint()
+            .connect(
+                self.node.my_addr().await.unwrap(),
+                iroh::bytes::protocol::ALPN,
+            )
+            .await
     }
 
     pub fn get_all(&self) -> impl Stream<Item = Result<Entry>> {

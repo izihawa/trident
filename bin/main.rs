@@ -9,6 +9,8 @@ use axum::{
 };
 use clap::{Parser, Subcommand};
 use futures::TryStreamExt;
+use headers::{HeaderMap, HeaderMapExt};
+use hyper::header;
 use iroh::rpc_protocol::ShareMode;
 use iroh::sync::store::DownloadPolicy;
 use iroh_base::hash::Hash;
@@ -32,6 +34,7 @@ use trident_storage::config::{Config, TableConfig};
 use trident_storage::error::Error;
 
 use trident_storage::iroh_node::IrohNode;
+use trident_storage::ranges::parse_byte_range;
 
 /// Simple program to greet a person
 #[derive(Parser)]
@@ -474,6 +477,7 @@ async fn table_foreign_insert(
 async fn table_root_get(
     State(state): State<AppState>,
     method: Method,
+    headers: HeaderMap,
     Host(subdomain): Host,
     Path(key): Path<String>,
 ) -> Response {
@@ -493,45 +497,112 @@ async fn table_root_get(
         }
         Some(table) => table,
     };
-    table_get(State(state), method, Path((table.to_string(), key))).await
+    table_get(
+        State(state),
+        method,
+        headers,
+        Path((table.to_string(), key)),
+    )
+    .await
+}
+
+async fn table_get_entire(
+    State(state): State<AppState>,
+    method: Method,
+    Path((table, key)): Path<(String, String)>,
+) -> Response {
+    let iroh_node = state.iroh_node.read().await.table_get(&table, &key).await;
+    let (reader, file_size, hash) = match iroh_node {
+        Ok(Some(iroh_node)) => iroh_node,
+        Ok(None) => {
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::default())
+                .unwrap()
+        }
+        Err(e) => return e.into_response(),
+    };
+    match method {
+        Method::HEAD => Response::builder()
+            .header(header::CONTENT_LENGTH, file_size)
+            .header(
+                header::CONTENT_TYPE,
+                mime_guess::from_ext(&key)
+                    .first_or_octet_stream()
+                    .to_string(),
+            )
+            .header("X-Iroh-Hash", hash.to_string())
+            .body(Body::default())
+            .unwrap(),
+        Method::GET => Response::builder()
+            .header(header::CONTENT_LENGTH, file_size)
+            .header(
+                header::CONTENT_TYPE,
+                mime_guess::from_ext(&key)
+                    .first_or_octet_stream()
+                    .to_string(),
+            )
+            .header("X-Iroh-Hash", hash.to_string())
+            .body(Body::from_stream(ReaderStream::new(reader)))
+            .unwrap(),
+        _ => unreachable!(),
+    }
 }
 
 async fn table_get(
     State(state): State<AppState>,
     method: Method,
+    headers: HeaderMap,
     Path((table, key)): Path<(String, String)>,
 ) -> Response {
-    match state.iroh_node.read().await.table_get(&table, &key).await {
-        Ok(Some((reader, file_size, hash))) => match method {
-            Method::HEAD => Response::builder()
-                .header("Content-Length", file_size)
+    match headers.typed_get::<headers::Range>() {
+        None => table_get_entire(State(state), method, Path((table, key))).await,
+        Some(range_value) => {
+            let byte_range = parse_byte_range(range_value).unwrap();
+            let (recv, size, is_all) = state
+                .iroh_node
+                .read()
+                .await
+                .table_get_partial(&table, &key, byte_range)
+                .await
+                .unwrap();
+            let status_code = if is_all {
+                StatusCode::OK
+            } else {
+                StatusCode::PARTIAL_CONTENT
+            };
+            let body = Body::from_stream(recv.into_stream());
+            let builder = Response::builder()
+                .status(status_code)
+                .header(header::ACCEPT_RANGES, "bytes")
+                .header(header::CACHE_CONTROL, "public,max-age=31536000,immutable")
                 .header(
-                    "Content-Type",
+                    header::CONTENT_TYPE,
                     mime_guess::from_ext(&key)
                         .first_or_octet_stream()
                         .to_string(),
-                )
-                .header("X-Iroh-Hash", hash.to_string())
-                .body(Body::default())
-                .unwrap(),
-            Method::GET => Response::builder()
-                .header("Content-Length", file_size)
-                .header(
-                    "Content-Type",
-                    mime_guess::from_ext(&key)
-                        .first_or_octet_stream()
-                        .to_string(),
-                )
-                .header("X-Iroh-Hash", hash.to_string())
-                .body(Body::from_stream(ReaderStream::new(reader)))
-                .unwrap(),
-            _ => unreachable!(),
-        },
-        Ok(None) => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::default())
-            .unwrap(),
-        Err(e) => e.into_response(),
+                );
+            // content-length needs to be the actual repsonse size
+            let transfer_size = match byte_range {
+                (Some(start), Some(end)) => end - start,
+                (Some(start), None) => size - start,
+                (None, Some(end)) => end,
+                (None, None) => size,
+            };
+            let builder = builder.header(header::CONTENT_LENGTH, transfer_size);
+
+            let builder = if byte_range.0.is_some() || byte_range.1.is_some() {
+                builder
+                    .header(
+                        header::CONTENT_RANGE,
+                        format_content_range(byte_range.0, byte_range.1, size),
+                    )
+                    .status(StatusCode::PARTIAL_CONTENT)
+            } else {
+                builder
+            };
+            builder.body(body).unwrap()
+        }
     }
 }
 
@@ -561,4 +632,14 @@ async fn table_ls(State(state): State<AppState>, Path(table): Path<String>) -> R
             .body(Body::default())
             .unwrap(),
     }
+}
+
+fn format_content_range(start: Option<u64>, end: Option<u64>, size: u64) -> String {
+    format!(
+        "bytes {}-{}/{}",
+        start.map(|x| x.to_string()).unwrap_or_default(),
+        end.map(|x| (x + 1).to_string())
+            .unwrap_or_else(|| size.to_string()),
+        size
+    )
 }

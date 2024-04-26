@@ -23,6 +23,7 @@ pub mod error;
 pub mod file_shard;
 mod hash_ring;
 pub mod iroh_node;
+pub mod ranges;
 mod table;
 mod utils;
 
