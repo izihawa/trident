@@ -62,6 +62,11 @@ enum Commands {
 }
 
 #[derive(Deserialize)]
+struct BlobsGet {
+    filename: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct TablesCreateRequest {
     storage: Option<String>,
 }
@@ -258,6 +263,7 @@ async fn blobs_get(
     State(state): State<AppState>,
     method: Method,
     Path(hash_str): Path<String>,
+    query: Query<BlobsGet>,
 ) -> Response {
     let Ok(hash) = Hash::from_str(&hash_str).map_err(Error::blobs) else {
         return Response::builder()
@@ -265,23 +271,33 @@ async fn blobs_get(
             .body(Body::default())
             .unwrap();
     };
+    let response_builder = match &query.filename {
+        Some(filename) => Response::builder()
+            .header(
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", filename),
+            )
+            .header(
+                header::CONTENT_TYPE,
+                mime_guess::from_path(&filename)
+                    .first_or_octet_stream()
+                    .to_string(),
+            ),
+        None => Response::builder().header(
+            header::CONTENT_TYPE,
+            mime_guess::mime::OCTET_STREAM.to_string(),
+        ),
+    };
+
     match state.iroh_node.read().await.blobs_get(hash).await {
         Ok(Some((reader, file_size))) => match method {
-            Method::HEAD => Response::builder()
+            Method::HEAD => response_builder
                 .header(header::CONTENT_LENGTH, file_size)
-                .header(
-                    header::CONTENT_TYPE,
-                    mime_guess::mime::OCTET_STREAM.to_string(),
-                )
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::default())
                 .unwrap(),
-            Method::GET => Response::builder()
+            Method::GET => response_builder
                 .header(header::CONTENT_LENGTH, file_size)
-                .header(
-                    header::CONTENT_TYPE,
-                    mime_guess::mime::OCTET_STREAM.to_string(),
-                )
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::from_stream(ReaderStream::new(reader)))
                 .unwrap(),
@@ -487,7 +503,14 @@ async fn table_root_get(
     headers: HeaderMap,
     Host(host): Host,
 ) -> Response {
-    table_root_path_get(State(state), method, headers, Host(host), Path("index.html".to_string())).await
+    table_root_path_get(
+        State(state),
+        method,
+        headers,
+        Host(host),
+        Path("index.html".to_string()),
+    )
+    .await
 }
 
 async fn table_root_path_get(
