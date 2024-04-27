@@ -558,9 +558,9 @@ checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
 name = "concurrent-queue"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d16048cd947b08fa32c24458a22f5dc5e835264f689f4f5653210c69fd107363"
+checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1775,7 +1775,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "iroh"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -1813,7 +1813,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "aead",
  "anyhow",
@@ -1853,7 +1853,7 @@ dependencies = [
 [[package]]
 name = "iroh-bytes"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -1893,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "iroh-gossip"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1932,7 +1932,7 @@ dependencies = [
 [[package]]
 name = "iroh-metrics"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -1952,7 +1952,7 @@ dependencies = [
 [[package]]
 name = "iroh-net"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "aead",
  "anyhow",
@@ -2021,7 +2021,7 @@ dependencies = [
 [[package]]
 name = "iroh-sync"
 version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#74c510a5c7ea9dbc72cdd5afb82051e47a24189d"
+source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3431,9 +3431,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.11"
+version = "0.21.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fecbfb7b1444f477b345853b1fce097a2c6fb637b2bfb87e6bc5db0f043fae4"
+checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
 dependencies = [
  "log",
  "ring 0.17.8",
@@ -3578,9 +3578,9 @@ checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
 
 [[package]]
 name = "serde"
-version = "1.0.198"
+version = "1.0.199"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9846a40c979031340571da2545a4e5b7c4163bdae79b301d5f86d03979451fcc"
+checksum = "0c9f6e76df036c77cd94996771fb40db98187f096dd0b9af39c6c6e452ba966a"
 dependencies = [
  "serde_derive",
 ]
@@ -3596,9 +3596,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.198"
+version = "1.0.199"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e88edab869b01783ba905e7d0153f9fc1a6505a96e4ad3018011eedb838566d9"
+checksum = "11bd257a6541e141e42ca6d24ae26f7714887b47e89aa739099104c7e4d3b7fc"
 dependencies = [
  "proc-macro2",
  "quote",

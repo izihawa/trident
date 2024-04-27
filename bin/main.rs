@@ -147,6 +147,7 @@ async fn app() -> Result<(), Error> {
             let mut router = Router::new()
                 .route("/blobs/:hash", get(blobs_get))
                 .route("/tables/", get(tables_ls))
+                .route("/tables/foreign_insert/", post(table_foreign_insert))
                 .route("/tables/:table/", post(tables_create))
                 .route("/tables/:table/exists/", get(tables_exists))
                 .route("/tables/:table/peers/", get(tables_peers))
@@ -157,11 +158,11 @@ async fn app() -> Result<(), Error> {
                 .route("/tables/:table/share/:mode/", get(table_share))
                 .route("/tables/:table/*key", get(table_get))
                 .route("/tables/:table/*key", put(table_insert))
-                .route("/tables/:table/*key", delete(table_delete))
-                .route("/tables/foreign_insert/", post(table_foreign_insert));
+                .route("/tables/:table/*key", delete(table_delete));
 
             if config.read().await.http.hostname.is_some() {
-                router = router.route("/:table/*key", get(table_root_get));
+                router = router.route("/", get(table_root_get));
+                router = router.route("/*key", get(table_root_path_get));
             }
 
             let app = router
@@ -481,6 +482,15 @@ async fn table_foreign_insert(
 }
 
 async fn table_root_get(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Host(host): Host,
+) -> Response {
+    table_root_path_get(State(state), method, headers, Host(host), Path("index.html".to_string())).await
+}
+
+async fn table_root_path_get(
     State(state): State<AppState>,
     method: Method,
     headers: HeaderMap,
