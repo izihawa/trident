@@ -432,8 +432,8 @@ impl IrohNode {
         Ok(())
     }
 
-    pub fn shutdown(self) -> Result<()> {
-        self.node.shutdown();
+    pub async fn shutdown(self) -> Result<()> {
+        self.node.shutdown().await.map_err(Error::node_create)?;
         Ok(())
     }
 }

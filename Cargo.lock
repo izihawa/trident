@@ -457,9 +457,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32a725bc159af97c3e629873bb9f88fb8cf8a4867175f76dc987815ea07c83b"
+checksum = "065a29261d53ba54260972629f9ca6bffa69bac13cd1fed61420f7fa68b9f8bd"
 
 [[package]]
 name = "cfg-if"
@@ -741,9 +741,9 @@ dependencies = [
 
 [[package]]
 name = "data-encoding"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e962a19be5cfc3f3bf6dd8f61eb50107f356ad6270fbb3ed41476571db78be5"
+checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
 
 [[package]]
 name = "default-net"
@@ -1076,9 +1076,9 @@ checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
 
 [[package]]
 name = "fastrand"
-version = "2.0.2"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "658bd65b1cf4c852a3cc96f18a8ce7b5640f6b703f905c7d74532294c2a63984"
+checksum = "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
 
 [[package]]
 name = "ff"
@@ -1361,9 +1361,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.3"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
  "allocator-api2",
@@ -1774,15 +1774,17 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 
 [[package]]
 name = "iroh"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "anyhow",
  "bao-tree",
  "bytes",
  "derive_more",
  "flume",
- "futures",
+ "futures-buffered",
+ "futures-lite",
+ "futures-util",
  "genawaiter",
  "hex",
  "iroh-base",
@@ -1812,8 +1814,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-base"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "aead",
  "anyhow",
@@ -1852,8 +1854,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-bytes"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "anyhow",
  "bao-tree",
@@ -1861,8 +1863,8 @@ dependencies = [
  "chrono",
  "derive_more",
  "flume",
- "futures",
  "futures-buffered",
+ "futures-lite",
  "genawaiter",
  "hashlink",
  "hex",
@@ -1892,14 +1894,14 @@ dependencies = [
 
 [[package]]
 name = "iroh-gossip"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "anyhow",
  "bytes",
  "derive_more",
  "ed25519-dalek",
- "futures",
+ "futures-lite",
  "genawaiter",
  "indexmap",
  "iroh-base",
@@ -1931,8 +1933,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-metrics"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -1951,8 +1953,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-net"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "aead",
  "anyhow",
@@ -1963,7 +1965,10 @@ dependencies = [
  "derive_more",
  "duct",
  "flume",
- "futures",
+ "futures-buffered",
+ "futures-lite",
+ "futures-sink",
+ "futures-util",
  "governor",
  "hex",
  "hickory-proto",
@@ -2020,20 +2025,21 @@ dependencies = [
 
 [[package]]
 name = "iroh-sync"
-version = "0.14.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#08a3d2aad72e551a9131e9415e2fae76da803908"
+version = "0.15.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#78d31e719a6a1fa500605b630781f5a311e827ba"
 dependencies = [
  "anyhow",
  "bytes",
  "derive_more",
  "ed25519-dalek",
  "flume",
- "futures",
+ "futures-util",
  "hex",
  "iroh-base",
  "iroh-blake3",
  "iroh-metrics",
  "iroh-net",
+ "lru",
  "num_enum",
  "postcard",
  "quinn",
@@ -2078,9 +2084,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.153"
+version = "0.2.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
+checksum = "ae743338b92ff9146ce83992f766a31066a91a8c84a45e0e9f21e7cf6de6d346"
 
 [[package]]
 name = "libm"
@@ -2951,14 +2957,16 @@ dependencies = [
 
 [[package]]
 name = "quic-rpc"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d960d0b328db80274cbcbaf4bf53728eff1f43df4fc36c34eb79a97753c7d9"
+checksum = "b7af964f8ee0a3ff7f03b8bc3ffce8cd604d9c2e5805b45d1446f774c71fb07e"
 dependencies = [
  "bincode",
  "educe",
  "flume",
- "futures",
+ "futures-lite",
+ "futures-sink",
+ "futures-util",
  "pin-project",
  "quinn",
  "serde",
@@ -3116,9 +3124,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "11.0.1"
+version = "11.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d86a7c4638d42c44551f4791a20e687dbb4c3de1f33c43dd71e355cd429def1"
+checksum = "e29830cbb1290e404f24c73af91c5d8d631ce7e128691e9477556b540cd01ecd"
 dependencies = [
  "bitflags 2.5.0",
 ]
@@ -3750,9 +3758,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.6"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05ffd9c0a93b7543e062e759284fcf5f5e3b098501104bfbdde4d404db792871"
+checksum = "ce305eb0b4296696835b71df73eb912e0f1ffd2556a501fcede6e0c50349191c"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
