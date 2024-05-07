@@ -3,17 +3,15 @@ use crate::error::{Error, Result};
 use crate::table::Table;
 use async_stream::stream;
 use futures::StreamExt;
-use iroh::bytes::store::fs::Store;
-use iroh::bytes::Hash;
+use iroh::blobs::store::fs::Store;
+use iroh::client::docs::{Entry, ShareMode};
+use iroh::docs::store::DownloadPolicy;
+use iroh::docs::{AuthorId, DocTicket, NamespaceId};
 use iroh::net::defaults::DEFAULT_RELAY_STUN_PORT;
 use iroh::net::relay::{RelayMap, RelayMode, RelayNode};
 use iroh::node::{GcPolicy, Node};
-use iroh::rpc_protocol::ShareMode;
-use iroh::sync::store::DownloadPolicy;
-use iroh::sync::{AuthorId, NamespaceId};
-use iroh::ticket::DocTicket;
+use iroh_base::hash::Hash;
 use iroh_base::node_addr::NodeAddr;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
@@ -172,7 +170,7 @@ impl IrohNode {
         Ok(iroh_node)
     }
 
-    pub fn client(&self) -> &iroh::client::mem::Iroh {
+    pub fn client(&self) -> &iroh::client::MemIroh {
         self.node.client()
     }
 
@@ -186,8 +184,10 @@ impl IrohNode {
         storage_name: Option<String>,
     ) -> Result<NamespaceId> {
         match self.tables.entry(table_name.to_string()) {
-            Entry::Occupied(_) => Err(Error::existing_table(table_name)),
-            Entry::Vacant(entry) => {
+            std::collections::hash_map::Entry::Occupied(_) => {
+                Err(Error::existing_table(table_name))
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
                 let iroh_doc = self
                     .node
                     .client()
@@ -245,7 +245,7 @@ impl IrohNode {
         let ticket = DocTicket::from_str(table_ticket).map_err(Error::doc)?;
         let nodes = ticket.nodes.clone();
         match self.tables.entry(table_name.to_string()) {
-            Entry::Occupied(entry) => {
+            std::collections::hash_map::Entry::Occupied(entry) => {
                 let iroh_doc = entry.get().iroh_doc();
                 if ticket.capability.id() != iroh_doc.id() {
                     return Err(Error::existing_table("different document in table"));
@@ -259,7 +259,7 @@ impl IrohNode {
                 iroh_doc.start_sync(nodes).await.map_err(Error::doc)?;
                 Ok(entry.get().iroh_doc().id())
             }
-            Entry::Vacant(entry) => {
+            std::collections::hash_map::Entry::Vacant(entry) => {
                 let iroh_doc = self
                     .node
                     .client()
@@ -377,11 +377,7 @@ impl IrohNode {
         }
     }
 
-    pub async fn table_get(
-        &self,
-        table_name: &str,
-        key: &str,
-    ) -> Result<Option<iroh::client::Entry>> {
+    pub async fn table_get(&self, table_name: &str, key: &str) -> Result<Option<Entry>> {
         let table = self
             .tables
             .get(table_name)

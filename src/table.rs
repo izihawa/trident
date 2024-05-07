@@ -3,22 +3,21 @@ use crate::error::{Error, Result};
 use crate::file_shard::FileShard;
 use crate::hash_ring::HashRing;
 use crate::utils::key_to_bytes;
-use crate::IrohDoc;
 use async_stream::stream;
 use bytes::Bytes;
+use iroh::blobs::store::{ExportMode, Map};
+
 use futures::{Stream, StreamExt};
-use iroh::bytes::store::fs::Store;
-use iroh::bytes::store::{ExportMode, Map};
-use iroh::bytes::Hash;
-use iroh::client::{Entry, LiveEvent};
+use iroh::blobs::store::fs::Store;
+use iroh::blobs::util::SetTagOption;
+use iroh::client::blobs::{DownloadMode, DownloadOptions};
+use iroh::client::docs::{Entry, LiveEvent, ShareMode};
+use iroh::docs::store::{DownloadPolicy, Query, SortBy, SortDirection};
+use iroh::docs::{AuthorId, Capability, ContentStatus, DocTicket};
 use iroh::net::key::PublicKey;
 use iroh::net::NodeAddr;
 use iroh::node::Node;
-use iroh::rpc_protocol::{BlobDownloadRequest, DownloadMode, SetTagOption, ShareMode};
-use iroh::sync::store::{DownloadPolicy, Query, SortBy, SortDirection};
-use iroh::sync::{AuthorId, Capability, ContentStatus};
-use iroh::ticket::DocTicket;
-use iroh_base::hash::BlobFormat;
+use iroh_base::hash::{BlobFormat, Hash};
 use lru::LruCache;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -95,7 +94,7 @@ impl Storage {
 #[derive(Clone)]
 pub struct Table {
     author_id: AuthorId,
-    iroh_doc: IrohDoc,
+    iroh_doc: iroh::client::MemDoc,
     table_config: TableConfig,
     cancellation_token: CancellationToken,
     task_tracker: TaskTracker,
@@ -108,7 +107,7 @@ impl Table {
         table_name: &str,
         author_id: AuthorId,
         node: Node<Store>,
-        iroh_doc: IrohDoc,
+        iroh_doc: iroh::client::MemDoc,
         storage_config: Option<StorageEngineConfig>,
         table_config: TableConfig,
         cancellation_token: CancellationToken,
@@ -314,13 +313,15 @@ impl Table {
         let progress = self
             .node
             .blobs
-            .download(BlobDownloadRequest {
-                hash: entry.content_hash(),
-                format: BlobFormat::Raw,
-                nodes: nodes.to_vec(),
-                tag: SetTagOption::Auto,
-                mode: DownloadMode::Queued,
-            })
+            .download_with_opts(
+                entry.content_hash(),
+                DownloadOptions {
+                    format: BlobFormat::Raw,
+                    nodes: nodes.to_vec(),
+                    tag: SetTagOption::Auto,
+                    mode: DownloadMode::Queued,
+                },
+            )
             .await
             .map_err(Error::io_error)?;
         progress.finish().await.map_err(Error::failed_download)?;
@@ -422,7 +423,7 @@ impl Table {
         }
     }
 
-    pub fn iroh_doc(&self) -> &IrohDoc {
+    pub fn iroh_doc(&self) -> &iroh::client::MemDoc {
         &self.iroh_doc
     }
 

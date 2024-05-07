@@ -1,5 +1,5 @@
 use crate::error::Error;
-use iroh::sync::store::DownloadPolicy;
+use iroh::docs::store::DownloadPolicy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

@@ -3,7 +3,7 @@ use std::ops::Bound;
 
 use bytes::Bytes;
 use headers::Range;
-use iroh::bytes::store::bao_tree::ChunkNum;
+use iroh::blobs::store::bao_tree::ChunkNum;
 use range_collections::{range_set::RangeSetRange, RangeSet2};
 
 /// Given a range specified as arbitrary range bounds, normalize it into a range

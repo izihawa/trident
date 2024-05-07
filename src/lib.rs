@@ -15,9 +15,6 @@
     clippy::unwrap_used
 )]
 
-use iroh::rpc_protocol::{ProviderRequest, ProviderResponse};
-use quic_rpc::transport::flume::FlumeConnection;
-
 pub mod config;
 pub mod error;
 pub mod file_shard;
@@ -26,6 +23,3 @@ pub mod iroh_node;
 pub mod ranges;
 mod table;
 mod utils;
-
-pub type IrohDoc = iroh::client::Doc<FlumeConnection<ProviderResponse, ProviderRequest>>;
-pub type IrohClient = iroh::client::Iroh<FlumeConnection<ProviderResponse, ProviderRequest>>;
