@@ -81,7 +81,7 @@ impl IrohNode {
 
         for doc in node
             .client()
-            .docs
+            .docs()
             .list()
             .await
             .map_err(Error::io_error)?
@@ -97,7 +97,7 @@ impl IrohNode {
             None => {
                 let author_id = node
                     .client()
-                    .authors
+                    .authors()
                     .create()
                     .await
                     .map_err(Error::author)?;
@@ -122,7 +122,7 @@ impl IrohNode {
             let init_future = tokio::spawn(async move {
                 let iroh_doc = node
                     .client()
-                    .docs
+                    .docs()
                     .open(NamespaceId::from_str(&table_config.id).map_err(Error::storage)?)
                     .await
                     .map_err(Error::table)?
@@ -191,7 +191,7 @@ impl IrohNode {
                 let iroh_doc = self
                     .node
                     .client()
-                    .docs
+                    .docs()
                     .create()
                     .await
                     .map_err(Error::table)?;
@@ -252,7 +252,7 @@ impl IrohNode {
                 }
                 self.node
                     .client()
-                    .docs
+                    .docs()
                     .import(ticket)
                     .await
                     .map_err(Error::table)?;
@@ -263,7 +263,7 @@ impl IrohNode {
                 let iroh_doc = self
                     .node
                     .client()
-                    .docs
+                    .docs()
                     .import(ticket)
                     .await
                     .map_err(Error::table)?;
@@ -321,7 +321,7 @@ impl IrohNode {
             Some(table) => {
                 self.node
                     .client()
-                    .docs
+                    .docs()
                     .drop_doc(table.iroh_doc().id())
                     .await
                     .map_err(Error::doc)?;
@@ -410,7 +410,7 @@ impl IrohNode {
         &self,
         hash: Hash,
     ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
-        let blob_reader = self.node.blobs.read(hash).await.map_err(Error::blobs)?;
+        let blob_reader = self.node.blobs().read(hash).await.map_err(Error::blobs)?;
         if !blob_reader.is_complete() {
             return Ok(None);
         }

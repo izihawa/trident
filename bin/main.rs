@@ -571,7 +571,7 @@ async fn table_get(
         None => (
             iroh_node
                 .client()
-                .blobs
+                .blobs()
                 .read(entry.content_hash())
                 .await
                 .map_err(Error::blobs),
@@ -596,7 +596,7 @@ async fn table_get(
             (
                 iroh_node
                     .client()
-                    .blobs
+                    .blobs()
                     .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
                     .await
                     .map_err(Error::blobs),

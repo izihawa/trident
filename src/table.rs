@@ -312,7 +312,7 @@ impl Table {
         let key = std::str::from_utf8(entry.key()).map_err(Error::incorrect_key)?;
         let progress = self
             .node
-            .blobs
+            .blobs()
             .download_with_opts(
                 entry.content_hash(),
                 DownloadOptions {
