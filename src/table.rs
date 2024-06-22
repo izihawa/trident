@@ -473,7 +473,7 @@ impl Table {
             ShareMode::Write => {
                 let secret = self
                     .node
-                    .sync_handle()
+                    .docs()
                     .export_secret_key(self.iroh_doc.id())
                     .await
                     .map_err(Error::missing_key)?;

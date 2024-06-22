@@ -7,7 +7,7 @@ use iroh::blobs::store::fs::Store;
 use iroh::client::docs::{Entry, ShareMode};
 use iroh::docs::store::DownloadPolicy;
 use iroh::docs::{AuthorId, DocTicket, NamespaceId};
-use iroh::net::defaults::DEFAULT_RELAY_STUN_PORT;
+use iroh::net::defaults::DEFAULT_STUN_PORT;
 use iroh::net::relay::{RelayMap, RelayMode, RelayNode};
 use iroh::node::{GcPolicy, Node};
 use iroh_base::hash::Hash;
@@ -60,7 +60,7 @@ impl IrohNode {
                     RelayNode {
                         url: url.into(),
                         stun_only: false,
-                        stun_port: DEFAULT_RELAY_STUN_PORT,
+                        stun_port: DEFAULT_STUN_PORT,
                     }
                 }))
                 .expect("relay config error"),
