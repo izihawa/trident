@@ -85,7 +85,7 @@ impl IrohNode {
             .list()
             .await
             .map_err(Error::io_error)?
-            .map(|x| x.unwrap().0)
+            .map(|x| x.expect("Can't extratc document").0)
             .collect::<Vec<_>>()
             .await
         {
@@ -225,7 +225,7 @@ impl IrohNode {
     }
 
     pub async fn tables_exists(&self, table_name: &str) -> bool {
-        self.tables.get(table_name).is_some()
+        self.tables.contains_key(table_name)
     }
 
     pub async fn tables_peers(&self, table_name: &str) -> Result<Option<Vec<NodeAddr>>> {
@@ -399,7 +399,7 @@ impl IrohNode {
             |table| {
                 Some(stream! {
                     for await el in table.get_all() {
-                        yield Ok(format!("{}\n", std::str::from_utf8(el.unwrap().key()).unwrap()))
+                        yield Ok(format!("{}\n", std::str::from_utf8(el.expect("Can't extract document").key()).expect("Not utf8 symbol")))
                     }
                 })
             },

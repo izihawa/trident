@@ -195,7 +195,7 @@ impl Table {
                             .get_many(Query::all())
                             .await
                             .map_err(Error::doc)?
-                            .map(|x| Bytes::copy_from_slice(x.unwrap().key()))
+                            .map(|x| Bytes::copy_from_slice(x.expect("Can't extract document").key()))
                             .collect()
                             .await,
                     );
@@ -348,7 +348,7 @@ impl Table {
             .get_many(Query::all())
             .await
             .map_err(Error::doc)?
-            .map(|x| x.unwrap())
+            .map(|x| x.expect("Can't extract document"))
             .collect()
             .await;
         let pool = Arc::new(Pool::bounded(threads as usize));

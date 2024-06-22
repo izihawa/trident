@@ -256,7 +256,7 @@ fn main() -> Result<(), Error> {
     Builder::new_multi_thread()
         .enable_all()
         .build()
-        .unwrap()
+        .expect("Can't build reactor")
         .block_on(app())
 }
 
@@ -270,7 +270,7 @@ async fn blobs_get(
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
-            .unwrap();
+            .expect("Can't build response");
     };
     let response_builder = match &query.filename {
         Some(filename) => Response::builder()
@@ -280,7 +280,7 @@ async fn blobs_get(
             )
             .header(
                 header::CONTENT_TYPE,
-                mime_guess::from_path(&filename)
+                mime_guess::from_path(filename)
                     .first_or_octet_stream()
                     .to_string(),
             ),
@@ -296,18 +296,18 @@ async fn blobs_get(
                 .header(header::CONTENT_LENGTH, file_size)
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::default())
-                .unwrap(),
+                .expect("Can't build response"),
             Method::GET => response_builder
                 .header(header::CONTENT_LENGTH, file_size)
                 .header("X-Iroh-Hash", hash_str)
                 .body(Body::from_stream(ReaderStream::new(reader)))
-                .unwrap(),
+                .expect("Can't build response"),
             _ => unreachable!(),
         },
         Ok(None) => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
-            .unwrap(),
+            .expect("Can't build response"),
         Err(e) => e.into_response(),
     }
 }
@@ -334,7 +334,7 @@ async fn tables_create(
             {
                 Ok(_) => Response::builder()
                     .body(Body::from(id.to_string()))
-                    .unwrap(),
+                    .expect("Can't build response"),
                 Err(error) => error.into_response(),
             }
         }
@@ -385,7 +385,7 @@ async fn tables_import(
             {
                 Ok(_) => Response::builder()
                     .body(Body::from(id.to_string()))
-                    .unwrap(),
+                    .expect("Can't build response"),
                 Err(error) => error.into_response(),
             }
         }
@@ -409,7 +409,9 @@ async fn tables_sync(
         )
         .await
     {
-        Ok(_) => Response::builder().body(Body::default()).unwrap(),
+        Ok(_) => Response::builder()
+            .body(Body::default())
+            .expect("Can't build response"),
         Err(e) => e.into_response(),
     }
 }
@@ -431,7 +433,9 @@ async fn tables_drop(State(state): State<AppState>, Path(table): Path<String>) -
                 .save_config(&state.config_path)
                 .await
             {
-                Ok(_) => Response::builder().body(Body::default()).unwrap(),
+                Ok(_) => Response::builder()
+                    .body(Body::default())
+                    .expect("Can't build response"),
                 Err(error) => error.into_response(),
             }
         }
@@ -446,7 +450,7 @@ async fn table_share(
     match state.iroh_node.read().await.table_share(&table, mode).await {
         Ok(ticket) => Response::builder()
             .body(Body::from(ticket.to_string()))
-            .unwrap(),
+            .expect("Can't build response"),
         Err(e) => e.into_response(),
     }
 }
@@ -470,7 +474,7 @@ async fn table_insert(
         Ok(hash) => Response::builder()
             .header("X-Iroh-Hash", hash.to_string())
             .body(Body::default())
-            .unwrap(),
+            .expect("Can't build response"),
         Err(e) => e.into_response(),
     }
 }
@@ -493,7 +497,7 @@ async fn table_foreign_insert(
     {
         Ok(hash) => Response::builder()
             .body(Body::from(hash.to_string()))
-            .unwrap(),
+            .expect("Can't build response"),
         Err(e) => e.into_response(),
     }
 }
@@ -525,7 +529,7 @@ async fn table_root_path_get(
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
-            .unwrap();
+            .expect("Can't build response");
     };
 
     let table = match subdomain.strip_suffix(&format!(".{}", config_hostname)) {
@@ -533,7 +537,7 @@ async fn table_root_path_get(
             return Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::default())
-                .unwrap()
+                .expect("Can't build response")
         }
         Some(table) => table,
     };
@@ -559,7 +563,7 @@ async fn table_get(
             return Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::default())
-                .unwrap()
+                .expect("Can't build response")
         }
         Err(e) => return e.into_response(),
     };
@@ -567,8 +571,8 @@ async fn table_get(
     let response_builder =
         Response::builder().header("X-Iroh-Hash", entry.content_hash().to_string());
 
-    let response_builder = match headers.typed_get::<Range>() {
-        None => response_builder
+    match method {
+        Method::HEAD => response_builder
             .status(StatusCode::OK)
             .header(header::CONTENT_LENGTH, entry.content_len())
             .header(
@@ -576,45 +580,28 @@ async fn table_get(
                 mime_guess::from_path(&key)
                     .first_or_octet_stream()
                     .to_string(),
-            ),
-        Some(range_value) => {
-            let (start, end) = match parse_byte_range(range_value).map_err(Error::blobs) {
-                Ok((start, end)) => (start, end),
-                Err(e) => return e.into_response(),
-            };
-            let offset = start.unwrap_or(0);
-            let length = end.map(|end| end - offset);
-            let definite_length = length.unwrap_or(entry.content_len() - offset);
-            response_builder
-                .status(StatusCode::PARTIAL_CONTENT)
-                .header(header::ACCEPT_RANGES, "bytes")
-                .header(header::CONTENT_LENGTH, definite_length)
-                .header(
-                    header::CONTENT_RANGE,
-                    format_content_range(start, end.map(|end| end - 1), entry.content_len()),
-                )
-                .header(
-                    header::CONTENT_TYPE,
-                    if definite_length == entry.content_len() {
-                        mime_guess::from_path(&key)
-                            .first_or_octet_stream()
-                            .to_string()
-                    } else {
-                        mime_guess::mime::OCTET_STREAM.to_string()
-                    },
-                )
-        }
-    };
-    match method {
-        Method::HEAD => response_builder.body(Body::default()).unwrap(),
+            )
+            .body(Body::default())
+            .expect("Can't build response"),
         Method::GET => {
-            let reader = match headers.typed_get::<Range>() {
-                None => iroh_node
-                    .client()
-                    .blobs()
-                    .read(entry.content_hash())
-                    .await
-                    .map_err(Error::blobs),
+            let (reader, response_builder) = match headers.typed_get::<Range>() {
+                None => (
+                    iroh_node
+                        .client()
+                        .blobs()
+                        .read(entry.content_hash())
+                        .await
+                        .map_err(Error::blobs),
+                    response_builder
+                        .status(StatusCode::OK)
+                        .header(header::CONTENT_LENGTH, entry.content_len())
+                        .header(
+                            header::CONTENT_TYPE,
+                            mime_guess::from_path(&key)
+                                .first_or_octet_stream()
+                                .to_string(),
+                        ),
+                ),
                 Some(range_value) => {
                     let (start, end) = match parse_byte_range(range_value).map_err(Error::blobs) {
                         Ok((start, end)) => (start, end),
@@ -622,12 +609,37 @@ async fn table_get(
                     };
                     let offset = start.unwrap_or(0);
                     let length = end.map(|end| end - offset);
-                    iroh_node
-                        .client()
-                        .blobs()
-                        .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
-                        .await
-                        .map_err(Error::blobs)
+                    let definite_length = length.unwrap_or(entry.content_len() - offset);
+                    (
+                        iroh_node
+                            .client()
+                            .blobs()
+                            .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
+                            .await
+                            .map_err(Error::blobs),
+                        response_builder
+                            .status(StatusCode::PARTIAL_CONTENT)
+                            .header(header::ACCEPT_RANGES, "bytes")
+                            .header(header::CONTENT_LENGTH, definite_length)
+                            .header(
+                                header::CONTENT_RANGE,
+                                format_content_range(
+                                    start,
+                                    end.map(|end| end - 1),
+                                    entry.content_len(),
+                                ),
+                            )
+                            .header(
+                                header::CONTENT_TYPE,
+                                if definite_length == entry.content_len() {
+                                    mime_guess::from_path(&key)
+                                        .first_or_octet_stream()
+                                        .to_string()
+                                } else {
+                                    mime_guess::mime::OCTET_STREAM.to_string()
+                                },
+                            ),
+                    )
                 }
             };
             let reader = match reader {
@@ -636,7 +648,7 @@ async fn table_get(
             };
             response_builder
                 .body(Body::from_stream(ReaderStream::new(reader)))
-                .unwrap()
+                .expect("Can't build response")
         }
         _ => unreachable!(),
     }
@@ -655,7 +667,7 @@ async fn table_delete(
     {
         Ok(removed) => Response::builder()
             .body(Body::from(format!("{}", removed)))
-            .unwrap(),
+            .expect("Can't build response"),
         Err(e) => e.into_response(),
     }
 }
@@ -666,7 +678,7 @@ async fn table_ls(State(state): State<AppState>, Path(table): Path<String>) -> R
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
-            .unwrap(),
+            .expect("Can't build response"),
     }
 }
 
