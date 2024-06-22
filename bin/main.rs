@@ -567,24 +567,16 @@ async fn table_get(
     let response_builder =
         Response::builder().header("X-Iroh-Hash", entry.content_hash().to_string());
 
-    let (reader, response_builder) = match headers.typed_get::<Range>() {
-        None => (
-            iroh_node
-                .client()
-                .blobs()
-                .read(entry.content_hash())
-                .await
-                .map_err(Error::blobs),
-            response_builder
-                .status(StatusCode::OK)
-                .header(header::CONTENT_LENGTH, entry.content_len())
-                .header(
-                    header::CONTENT_TYPE,
-                    mime_guess::from_path(&key)
-                        .first_or_octet_stream()
-                        .to_string(),
-                ),
-        ),
+    let response_builder = match headers.typed_get::<Range>() {
+        None => response_builder
+            .status(StatusCode::OK)
+            .header(header::CONTENT_LENGTH, entry.content_len())
+            .header(
+                header::CONTENT_TYPE,
+                mime_guess::from_path(&key)
+                    .first_or_octet_stream()
+                    .to_string(),
+            ),
         Some(range_value) => {
             let (start, end) = match parse_byte_range(range_value).map_err(Error::blobs) {
                 Ok((start, end)) => (start, end),
@@ -593,43 +585,59 @@ async fn table_get(
             let offset = start.unwrap_or(0);
             let length = end.map(|end| end - offset);
             let definite_length = length.unwrap_or(entry.content_len() - offset);
-            (
-                iroh_node
-                    .client()
-                    .blobs()
-                    .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
-                    .await
-                    .map_err(Error::blobs),
-                response_builder
-                    .status(StatusCode::PARTIAL_CONTENT)
-                    .header(header::ACCEPT_RANGES, "bytes")
-                    .header(header::CONTENT_LENGTH, definite_length)
-                    .header(
-                        header::CONTENT_RANGE,
-                        format_content_range(start, end.map(|end| end - 1), entry.content_len()),
-                    )
-                    .header(
-                        header::CONTENT_TYPE,
-                        if definite_length == entry.content_len() {
-                            mime_guess::from_path(&key)
-                                .first_or_octet_stream()
-                                .to_string()
-                        } else {
-                            mime_guess::mime::OCTET_STREAM.to_string()
-                        },
-                    ),
-            )
+            response_builder
+                .status(StatusCode::PARTIAL_CONTENT)
+                .header(header::ACCEPT_RANGES, "bytes")
+                .header(header::CONTENT_LENGTH, definite_length)
+                .header(
+                    header::CONTENT_RANGE,
+                    format_content_range(start, end.map(|end| end - 1), entry.content_len()),
+                )
+                .header(
+                    header::CONTENT_TYPE,
+                    if definite_length == entry.content_len() {
+                        mime_guess::from_path(&key)
+                            .first_or_octet_stream()
+                            .to_string()
+                    } else {
+                        mime_guess::mime::OCTET_STREAM.to_string()
+                    },
+                )
         }
-    };
-    let reader = match reader {
-        Ok(reader) => reader,
-        Err(e) => return e.into_response(),
     };
     match method {
         Method::HEAD => response_builder.body(Body::default()).unwrap(),
-        Method::GET => response_builder
-            .body(Body::from_stream(ReaderStream::new(reader)))
-            .unwrap(),
+        Method::GET => {
+            let reader = match headers.typed_get::<Range>() {
+                None => iroh_node
+                    .client()
+                    .blobs()
+                    .read(entry.content_hash())
+                    .await
+                    .map_err(Error::blobs),
+                Some(range_value) => {
+                    let (start, end) = match parse_byte_range(range_value).map_err(Error::blobs) {
+                        Ok((start, end)) => (start, end),
+                        Err(e) => return e.into_response(),
+                    };
+                    let offset = start.unwrap_or(0);
+                    let length = end.map(|end| end - offset);
+                    iroh_node
+                        .client()
+                        .blobs()
+                        .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
+                        .await
+                        .map_err(Error::blobs)
+                }
+            };
+            let reader = match reader {
+                Ok(reader) => reader,
+                Err(e) => return e.into_response(),
+            };
+            response_builder
+                .body(Body::from_stream(ReaderStream::new(reader)))
+                .unwrap()
+        }
         _ => unreachable!(),
     }
 }
