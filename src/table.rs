@@ -480,10 +480,9 @@ impl Table {
                 Capability::Write(secret)
             }
         };
-        let me = self.node.my_addr().await.map_err(Error::io_error)?;
         Ok(DocTicket {
             capability,
-            nodes: vec![NodeAddr::from(me.node_id)],
+            nodes: vec![NodeAddr::from(self.node.node_id())],
         })
     }
 
