@@ -170,7 +170,7 @@ impl IrohNode {
         Ok(iroh_node)
     }
 
-    pub fn client(&self) -> &iroh::client::MemIroh {
+    pub fn client(&self) -> &iroh::client::Iroh {
         self.node.client()
     }
 
