@@ -94,7 +94,7 @@ impl Storage {
 #[derive(Clone)]
 pub struct Table {
     author_id: AuthorId,
-    iroh_doc: iroh::client::MemDoc,
+    iroh_doc: iroh::client::Doc,
     table_config: TableConfig,
     cancellation_token: CancellationToken,
     task_tracker: TaskTracker,
@@ -107,7 +107,7 @@ impl Table {
         table_name: &str,
         author_id: AuthorId,
         node: Node<Store>,
-        iroh_doc: iroh::client::MemDoc,
+        iroh_doc: iroh::client::Doc,
         storage_config: Option<StorageEngineConfig>,
         table_config: TableConfig,
         cancellation_token: CancellationToken,
@@ -423,7 +423,7 @@ impl Table {
         }
     }
 
-    pub fn iroh_doc(&self) -> &iroh::client::MemDoc {
+    pub fn iroh_doc(&self) -> &iroh::client::Doc {
         &self.iroh_doc
     }
 
