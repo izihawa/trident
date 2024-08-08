@@ -437,12 +437,11 @@ impl Table {
             .map_err(Error::entry)?;
 
         if let Some(entry) = entry {
-            let db_entry = self
-                .node
-                .db()
-                .get(&entry.content_hash())
-                .await
-                .unwrap_or_default();
+            let db_entry = match self.node.db().get(&entry.content_hash()).await {
+                Ok(db_entry) => db_entry,
+                Err(_) => return Ok(None),
+            };
+
             let is_complete = db_entry.map_or(false, |db_entry| db_entry.is_complete());
             if !is_complete {
                 if let Ok(Some(mut peers)) = self.iroh_doc.get_sync_peers().await {

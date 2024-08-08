@@ -410,7 +410,10 @@ impl IrohNode {
         &self,
         hash: Hash,
     ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
-        let blob_reader = self.node.blobs().read(hash).await.map_err(Error::blobs)?;
+        let blob_reader = match self.node.blobs().read(hash).await {
+            Ok(blob_reader) => blob_reader,
+            Err(_) => return Ok(None),
+        };
         if !blob_reader.is_complete() {
             return Ok(None);
         }
