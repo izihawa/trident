@@ -7,6 +7,13 @@ use std::path::{Path, PathBuf};
 fn return_0() -> u32 {
     0
 }
+fn return_default_address() -> String {
+    "0.0.0.0".to_string()
+}
+
+fn return_false() -> bool {
+    false
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StorageEngineConfig {
@@ -34,6 +41,8 @@ pub struct TableConfig {
     #[serde(default = "DownloadPolicy::default")]
     pub download_policy: DownloadPolicy,
     pub storage_name: Option<String>,
+    #[serde(default = "return_false")]
+    pub safe_mode: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,6 +66,8 @@ pub struct IrohConfig {
     #[serde(default = "HashMap::new")]
     pub tables: HashMap<String, TableConfig>,
     pub path: PathBuf,
+    #[serde(default = "return_default_address")]
+    pub bind_address: String,
     pub bind_port: u16,
     #[serde(default = "HashMap::new")]
     pub storages: HashMap<String, StorageEngineConfig>,
@@ -78,6 +89,7 @@ impl Config {
                 author: None,
                 tables: Default::default(),
                 path: base_path.join("iroh").to_path_buf(),
+                bind_address: "0.0.0.0".to_string(),
                 bind_port: 11204,
                 storages: HashMap::from_iter(vec![(
                     "default".to_string(),

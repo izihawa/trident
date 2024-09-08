@@ -238,33 +238,7 @@ impl Table {
                                             if import_threads_task_tracker0.is_closed() {
                                                 return
                                             }
-                                            let join_handle = import_threads_task_tracker0.spawn(async move {
-                                                let iroh_doc = iroh_doc.clone();
-                                                let import_progress = match iroh_doc
-                                                    .import_file(
-                                                        table.author_id,
-                                                        key,
-                                                        &entry.path(),
-                                                        true,
-                                                    )
-                                                    .await
-                                                    .map_err(Error::doc) {
-                                                    Ok(import_progress) => import_progress,
-                                                    Err(error) => {
-                                                        error!(error = ?error, path = ?entry.path(), key = ?entry.file_name(), "import_progress_error");
-                                                        return;
-                                                    }
-                                                };
-                                                if let Err(error) = import_progress.finish().await.map_err(Error::storage) {
-                                                    error!(
-                                                        error = ?error,
-                                                        path = ?entry.path(),
-                                                        key = ?entry.file_name(),
-                                                        "import_progress_error"
-                                                    );
-                                                }
-                                                info!(action = "imported", key = ?entry.file_name())
-                                            }.instrument(info_span!(parent: None, "import_missing", shard = ?base_path)));
+                                            let join_handle = import_threads_task_tracker0.spawn(Table::import_existing_file(iroh_doc.clone(), table.author_id.clone(), key, entry.path()).instrument(info_span!(parent: None, "import_missing", shard = ?base_path)));
                                             if let Err(error) = join_handle.await {
                                                 error!(
                                                     error = ?error,
@@ -287,6 +261,35 @@ impl Table {
             }
         }
         Ok(table)
+    }
+
+    async fn import_existing_file(
+        iroh_doc: iroh::client::Doc,
+        author_id: AuthorId,
+        key_bytes: Bytes,
+        path: PathBuf,
+    ) -> bool {
+        let import_progress = match iroh_doc
+            .import_file(author_id, key_bytes, &path, true)
+            .await
+            .map_err(Error::doc)
+        {
+            Ok(import_progress) => import_progress,
+            Err(error) => {
+                error!(error = ?error, path = ?path, "import_existing_file_progress_error");
+                return false;
+            }
+        };
+        if let Err(error) = import_progress.finish().await.map_err(Error::storage) {
+            error!(
+                error = ?error,
+                path = ?path,
+                "import_existing_file_progress_error"
+            );
+            return false;
+        }
+        info!(action = "imported_existing_file");
+        return true;
     }
 
     async fn process_remote_entry(&self, key: &str, entry: &Entry) -> Result<Option<PathBuf>> {
@@ -427,6 +430,29 @@ impl Table {
         &self.iroh_doc
     }
 
+    pub async fn get_with_import(&self, key: &str) -> Result<Option<Entry>> {
+        match (
+            self.get(key).await,
+            &self.storage,
+            self.table_config.safe_mode,
+        ) {
+            (Ok(None), Some(storage), true) => {
+                if Table::import_existing_file(
+                    self.iroh_doc.clone(),
+                    self.author_id.clone(),
+                    key_to_bytes(key),
+                    storage.get_path(key).unwrap(),
+                )
+                .await
+                {
+                    return self.get(key).await;
+                }
+                return Ok(None);
+            }
+            (r, _, _) => r,
+        }
+    }
+
     pub async fn get(&self, key: &str) -> Result<Option<Entry>> {
         let entry = self
             .iroh_doc
@@ -435,7 +461,6 @@ impl Table {
             )
             .await
             .map_err(Error::entry)?;
-
         if let Some(entry) = entry {
             let db_entry = self
                 .node

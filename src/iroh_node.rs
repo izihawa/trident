@@ -14,6 +14,7 @@ use iroh_base::hash::Hash;
 use iroh_base::node_addr::NodeAddr;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -71,7 +72,10 @@ impl IrohNode {
             .await
             .map_err(Error::node_create)?
             .relay_mode(relay_mode)
-            .bind_port(config_lock.iroh.bind_port);
+            .bind_addr_v4(SocketAddrV4::new(
+                Ipv4Addr::from_str(&config_lock.iroh.bind_address).map_err(Error::node_create)?,
+                config_lock.iroh.bind_port,
+            ));
 
         if let Some(gc_interval_secs) = config_lock.iroh.gc_interval_secs {
             node_builder =
@@ -85,7 +89,7 @@ impl IrohNode {
             .list()
             .await
             .map_err(Error::io_error)?
-            .map(|x| x.expect("Can't extratc document").0)
+            .map(|x| x.expect("Can't extract document").0)
             .collect::<Vec<_>>()
             .await
         {
@@ -131,7 +135,6 @@ impl IrohNode {
                     .set_download_policy(table_config.download_policy.clone())
                     .await
                     .map_err(Error::doc)?;
-
                 iroh_doc.start_sync(vec![]).await.map_err(Error::doc)?;
                 let table = Table::new(
                     &table_name,
@@ -199,6 +202,7 @@ impl IrohNode {
                     id: iroh_doc.id().to_string(),
                     download_policy: DownloadPolicy::default(),
                     storage_name: storage_name.clone(),
+                    safe_mode: false,
                 };
                 let table = Table::new(
                     table_name,
@@ -276,6 +280,7 @@ impl IrohNode {
                     id: iroh_doc.id().to_string(),
                     download_policy,
                     storage_name: storage_name.clone(),
+                    safe_mode: false,
                 };
                 let storage_engine = Table::new(
                     table_name,
@@ -382,7 +387,7 @@ impl IrohNode {
             .tables
             .get(table_name)
             .ok_or_else(|| Error::missing_table(table_name))?;
-        table.get(key).await
+        table.get_with_import(key).await
     }
 
     pub async fn table_delete(&self, table_name: &str, key: &str) -> Result<usize> {
