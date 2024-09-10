@@ -95,6 +95,13 @@ struct TablesForeignInsertRequest {
     to_key: String,
 }
 
+#[derive(Deserialize)]
+struct TablesHashInsertRequest {
+    hash: String,
+    to_table: String,
+    to_key: String,
+}
+
 #[derive(Clone)]
 struct AppState {
     iroh_node: Arc<RwLock<IrohNode>>,
@@ -152,8 +159,9 @@ async fn app() -> Result<(), Error> {
             let mut router = Router::new()
                 .route("/blobs/:hash", get(blobs_get))
                 .route("/tables/", get(tables_ls))
-                .route("/tables/foreign_insert/", post(table_foreign_insert))
                 .route("/tables/:table/", post(tables_create))
+                .route("/tables/foreign_insert/", post(tables_foreign_insert))
+                .route("/tables/hash_insert/", post(tables_hash_insert))
                 .route("/tables/:table/exists/", get(tables_exists))
                 .route("/tables/:table/peers/", get(tables_peers))
                 .route("/tables/:table/", delete(tables_drop))
@@ -179,7 +187,6 @@ async fn app() -> Result<(), Error> {
                 .layer(CorsLayer::permissive())
                 .with_state(state);
 
-            // run our app with hyper, listening globally on port 3000
             let listener = tokio::net::TcpListener::bind(&config.read().await.http.endpoint)
                 .await
                 .map_err(Error::io_error)?;
@@ -479,7 +486,7 @@ async fn table_insert(
     }
 }
 
-async fn table_foreign_insert(
+async fn tables_foreign_insert(
     State(state): State<AppState>,
     Query(query): Query<TablesForeignInsertRequest>,
 ) -> Response {
@@ -490,6 +497,28 @@ async fn table_foreign_insert(
         .tables_foreign_insert(
             &query.from_table,
             &query.from_key,
+            &query.to_table,
+            &query.to_key,
+        )
+        .await
+    {
+        Ok(hash) => Response::builder()
+            .body(Body::from(hash.to_string()))
+            .expect("Can't build response"),
+        Err(e) => e.into_response(),
+    }
+}
+
+async fn tables_hash_insert(
+    State(state): State<AppState>,
+    Query(query): Query<TablesHashInsertRequest>,
+) -> Response {
+    match state
+        .iroh_node
+        .read()
+        .await
+        .tables_hash_insert(
+            &query.hash,
             &query.to_table,
             &query.to_key,
         )

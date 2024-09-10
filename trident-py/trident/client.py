@@ -112,10 +112,19 @@ class TridentClient(BaseClient):
         await self.delete(url)
 
     async def table_foreign_insert(self, from_table: str, from_key: str, to_table: str, to_key: str) -> bytes:
-        url = f"/tables/foreign_insert/"
+        url = "/tables/foreign_insert/"
         response = await self.post(url, params={
             'from_table': from_table,
             'from_key': from_key,
+            'to_table': to_table,
+            'to_key': to_key,
+        })
+        return await response.read()
+
+    async def table_hash_insert(self, hash: str, to_table: str, to_key: str) -> bytes:
+        url = "/tables/hash_insert/"
+        response = await self.post(url, params={
+            'hash': hash,
             'to_table': to_table,
             'to_key': to_key,
         })
@@ -139,10 +148,10 @@ class TridentClient(BaseClient):
         async for data, _ in response.content.iter_chunks():
             yield data
 
-    async def table_ls(self, table) -> typing.AsyncGenerator[str, None]:
+    async def table_ls(self, table) -> typing.AsyncGenerator[dict, None]:
         response = await self.get(f"/tables/{table}/")
         async for line in response.content:
-            yield line.decode()[:-1]
+            yield json.loads(line.decode())
 
     async def table_exists(self, table: str, key: str) -> dict | None:
         url = f"/tables/{table}/{key}"

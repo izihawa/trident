@@ -12,6 +12,7 @@ use iroh::net::relay::{RelayMap, RelayMode, RelayNode};
 use iroh::node::{GcPolicy, Node};
 use iroh_base::hash::Hash;
 use iroh_base::node_addr::NodeAddr;
+use serde_json::json;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -375,6 +376,25 @@ impl IrohNode {
         Ok(from_hash)
     }
 
+    pub async fn tables_hash_insert(
+        &self,
+        hash: &str,
+        to_table_name: &str,
+        to_key: &str,
+    ) -> Result<Hash> {
+        let Some(to_table) = self.tables.get(to_table_name) else {
+            return Err(Error::missing_table(to_table_name));
+        };
+        let hash = Hash::from_str(hash).map_err(Error::blobs)?;
+        match self.blobs_get(hash.clone()).await? {
+            Some((_, size)) => {
+                to_table.insert_hash(to_key, hash, size).await?;
+                Ok(hash)
+            }
+            None => Err(Error::missing_key(hash))
+        }
+    }
+
     pub async fn table_share(&self, table_name: &str, mode: ShareMode) -> Result<DocTicket> {
         match self.tables.get(table_name) {
             Some(table) => Ok(table.share(mode).await?),
@@ -404,7 +424,15 @@ impl IrohNode {
             |table| {
                 Some(stream! {
                     for await el in table.get_all() {
-                        yield Ok(format!("{}\n", std::str::from_utf8(el.expect("Can't extract document").key()).expect("Not utf8 symbol")))
+                        let entry = el.expect("Can't extract document");
+                        let key = std::str::from_utf8(entry.key()).expect("Not utf8 symbol");
+                        let hash_str = entry.content_hash().to_string();
+                        let data = json!({
+                            "key": key,
+                            "hash": hash_str,
+                            "size": entry.content_len(),
+                        });
+                        yield Ok(format!("{}\n", data.to_string()))
                     }
                 })
             },
@@ -415,12 +443,21 @@ impl IrohNode {
         &self,
         hash: Hash,
     ) -> Result<Option<(Box<dyn AsyncRead + Unpin + Send>, u64)>> {
-        let blob_reader = self.node.blobs().read(hash).await.map_err(Error::blobs)?;
-        if !blob_reader.is_complete() {
-            return Ok(None);
+        match self.node.blobs().read(hash).await {
+            Ok(blob_reader) => {
+                if !blob_reader.is_complete() {
+                    return Ok(None);
+                }
+                let file_size = blob_reader.size();
+                Ok(Some((Box::new(blob_reader), file_size)))
+            }
+            Err(e) => {
+                if e.to_string() == "Blob not found" {
+                    return Ok(None);
+                }
+                Err(Error::blobs(e))
+            }
         }
-        let file_size = blob_reader.size();
-        Ok(Some((Box::new(blob_reader), file_size)))
     }
 
     pub async fn send_shutdown(&self) -> Result<()> {

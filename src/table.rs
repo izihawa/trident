@@ -227,18 +227,17 @@ impl Table {
                                 entry = read_dir_stream.next_entry() => {
                                     let entry = entry.map_err(Error::io_error)?;
                                     if let Some(entry) = entry {
-                                        let key = key_to_bytes(&entry.file_name().to_string_lossy());
-                                        if all_keys.contains(&key) || key.starts_with(&[b'~']) {
+                                        let key_bytes = key_to_bytes(&entry.file_name().to_string_lossy());
+                                        if all_keys.contains(&key_bytes) || key_bytes.starts_with(&[b'~']) {
                                             continue;
                                         }
                                         let import_threads_task_tracker0 = import_threads_task_tracker0.clone();
-                                        let base_path = base_path.clone();
                                         let iroh_doc = iroh_doc.clone();
                                         pool.spawn(async move {
                                             if import_threads_task_tracker0.is_closed() {
                                                 return
                                             }
-                                            let join_handle = import_threads_task_tracker0.spawn(Table::import_existing_file(iroh_doc.clone(), table.author_id.clone(), key, entry.path()).instrument(info_span!(parent: None, "import_missing", shard = ?base_path)));
+                                            let join_handle = import_threads_task_tracker0.spawn(Table::import_existing_file(iroh_doc.clone(), table.author_id.clone(), key_bytes, entry.path()).instrument(info_span!(parent: None, "import_missing")));
                                             if let Err(error) = join_handle.await {
                                                 error!(
                                                     error = ?error,
@@ -276,19 +275,19 @@ impl Table {
         {
             Ok(import_progress) => import_progress,
             Err(error) => {
-                error!(error = ?error, path = ?path, "import_existing_file_progress_error");
+                warn!(error = ?error, path = ?path, "import_existing_file_progress_error");
                 return false;
             }
         };
         if let Err(error) = import_progress.finish().await.map_err(Error::storage) {
-            error!(
+            warn!(
                 error = ?error,
                 path = ?path,
                 "import_existing_file_progress_error"
             );
             return false;
         }
-        info!(action = "imported_existing_file");
+        info!(action = "imported_existing_file", path = ?path);
         return true;
     }
 

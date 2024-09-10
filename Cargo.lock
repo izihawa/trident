@@ -4739,6 +4739,7 @@ dependencies = [
  "range-collections",
  "redb 2.1.2",
  "serde",
+ "serde_json",
  "serde_yaml",
  "thiserror",
  "tokio",
