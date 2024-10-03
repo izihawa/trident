@@ -5,12 +5,12 @@ use crate::hash_ring::HashRing;
 use crate::utils::key_to_bytes;
 use async_stream::stream;
 use bytes::Bytes;
-use iroh::blobs::store::{ExportMode, Map};
+use iroh::blobs::store::ExportMode;
 
 use futures::{Stream, StreamExt};
 use iroh::blobs::store::fs::Store;
 use iroh::blobs::util::SetTagOption;
-use iroh::client::blobs::{DownloadMode, DownloadOptions};
+use iroh::client::blobs::{BlobStatus, DownloadMode, DownloadOptions};
 use iroh::client::docs::{Entry, LiveEvent, ShareMode};
 use iroh::docs::store::{DownloadPolicy, Query, SortBy, SortDirection};
 use iroh::docs::{AuthorId, Capability, ContentStatus, DocTicket};
@@ -461,24 +461,27 @@ impl Table {
             .await
             .map_err(Error::entry)?;
         if let Some(entry) = entry {
-            let db_entry = self
+            let blob_status = self
                 .node
-                .db()
-                .get(&entry.content_hash())
+                .blobs()
+                .status(entry.content_hash())
                 .await
-                .unwrap_or_default();
-            let is_complete = db_entry.map_or(false, |db_entry| db_entry.is_complete());
-            if !is_complete {
-                if let Ok(Some(mut peers)) = self.iroh_doc.get_sync_peers().await {
-                    peers.shuffle(&mut thread_rng());
-                    let nodes = peers
-                        .iter()
-                        .filter_map(|peer| PublicKey::from_bytes(peer).map(NodeAddr::from).ok())
-                        .collect();
-                    self.download_entry_from_peers(&entry, nodes).await?;
+                .map_err(Error::entry)?;
+            match blob_status {
+                BlobStatus::NotFound | BlobStatus::Partial { .. } => {
+                    if let Ok(Some(mut peers)) = self.iroh_doc.get_sync_peers().await {
+                        peers.shuffle(&mut thread_rng());
+                        let nodes = peers
+                            .iter()
+                            .filter_map(|peer| PublicKey::from_bytes(peer).map(NodeAddr::from).ok())
+                            .collect();
+                        self.download_entry_from_peers(&entry, nodes).await?;
+                    }
+                }
+                BlobStatus::Complete { .. } => {
+                    return Ok(Some(entry));
                 }
             }
-            return Ok(Some(entry));
         }
         Ok(None)
     }

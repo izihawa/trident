@@ -391,7 +391,7 @@ impl IrohNode {
                 to_table.insert_hash(to_key, hash, size).await?;
                 Ok(hash)
             }
-            None => Err(Error::missing_key(hash))
+            None => Err(Error::missing_key(hash)),
         }
     }
 

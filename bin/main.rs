@@ -517,11 +517,7 @@ async fn tables_hash_insert(
         .iroh_node
         .read()
         .await
-        .tables_hash_insert(
-            &query.hash,
-            &query.to_table,
-            &query.to_key,
-        )
+        .tables_hash_insert(&query.hash, &query.to_table, &query.to_key)
         .await
     {
         Ok(hash) => Response::builder()
