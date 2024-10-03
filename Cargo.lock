@@ -1869,8 +1869,8 @@ checksum = "187674a687eed5fe42285b40c6291f9a01517d415fad1c3cbc6a9f778af7fcd4"
 
 [[package]]
 name = "iroh"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -1913,8 +1913,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-base"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "aead",
  "anyhow",
@@ -1954,8 +1954,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-blobs"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -1996,8 +1996,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-docs"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -2034,8 +2034,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-gossip"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -2074,8 +2074,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-metrics"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -2094,8 +2094,8 @@ dependencies = [
 
 [[package]]
 name = "iroh-net"
-version = "0.25.0"
-source = "git+https://github.com/izihawa/iroh?branch=main#1361fa5bf6e6d0be405c5e69d200dd5d9bb589f7"
+version = "0.26.0"
+source = "git+https://github.com/izihawa/iroh?branch=main#8c1f8586b152b9104ad62ccfc71519a4b829c1ac"
 dependencies = [
  "anyhow",
  "backoff",

@@ -11,6 +11,7 @@ use clap::{Parser, Subcommand};
 use futures::TryStreamExt;
 use headers::{HeaderMap, HeaderMapExt, Range};
 use hyper::header;
+use iroh::client::blobs::ReadAtLen;
 use iroh::client::docs::ShareMode;
 use iroh::docs::store::DownloadPolicy;
 use iroh_base::hash::Hash;
@@ -639,7 +640,11 @@ async fn table_get(
                         iroh_node
                             .client()
                             .blobs()
-                            .read_at(entry.content_hash(), offset, length.map(|x| x as usize))
+                            .read_at(
+                                entry.content_hash(),
+                                offset,
+                                length.map_or(ReadAtLen::All, ReadAtLen::Exact),
+                            )
                             .await
                             .map_err(Error::blobs),
                         response_builder
