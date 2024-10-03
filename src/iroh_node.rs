@@ -73,6 +73,7 @@ impl IrohNode {
             .await
             .map_err(Error::node_create)?
             .relay_mode(relay_mode)
+            .enable_docs()
             .bind_addr_v4(SocketAddrV4::new(
                 Ipv4Addr::from_str(&config_lock.iroh.bind_address).map_err(Error::node_create)?,
                 config_lock.iroh.bind_port,
